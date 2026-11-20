@@ -6,3 +6,4 @@ build/
 *.spec
 vault.key
 vault.bin
+browser-1.0.0-source.zip
