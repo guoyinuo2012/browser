@@ -1,0 +1,15 @@
+{
+  "id": "video-speed-controls",
+  "name": "Video Speed Controls",
+  "version": "1.0.0",
+  "description": "Keyboard speed control for HTML5 video: [ slower, ] faster, 0 reset, with on-screen indicator. Works on YouTube, Vimeo and any site with <video>.",
+  "builtin": true,
+  "default_on": true,
+  "permissions": [
+    "page",
+    "private"
+  ],
+  "matches": [
+    "*://*/*"
+  ]
+}

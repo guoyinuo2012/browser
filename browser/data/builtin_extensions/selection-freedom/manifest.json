@@ -1,0 +1,15 @@
+{
+  "id": "selection-freedom",
+  "name": "Selection Freedom",
+  "version": "1.0.0",
+  "description": "Re-enables text selection, right-click and dragging on pages that block them. Disable per site where a page's custom editor needs those blocks.",
+  "builtin": true,
+  "default_on": true,
+  "permissions": [
+    "page",
+    "private"
+  ],
+  "matches": [
+    "*://*/*"
+  ]
+}

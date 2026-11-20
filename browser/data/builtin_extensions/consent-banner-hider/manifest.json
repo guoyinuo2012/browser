@@ -1,0 +1,15 @@
+{
+  "id": "consent-banner-hider",
+  "name": "Consent Banner Hider",
+  "version": "1.0.0",
+  "description": "Hides cookie/consent banners and newsletter popups from the major consent platforms and common patterns. Hide-only: it never clicks anything on your behalf. Disable per site if a site misbehaves.",
+  "builtin": true,
+  "default_on": true,
+  "permissions": [
+    "page",
+    "private"
+  ],
+  "matches": [
+    "*://*/*"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "dark-reader-lite",
+  "name": "Dark Reader Lite",
+  "version": "1.0.0",
+  "description": "Per-site dark mode via smart color inversion. Off by default \u2014 toggle it for the current site from Tools \u2192 Extensions, or on the Extensions page.",
+  "builtin": true,
+  "default_on": false,
+  "permissions": [
+    "page",
+    "private"
+  ],
+  "matches": [
+    "*://*/*"
+  ]
+}
