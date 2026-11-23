@@ -7,3 +7,6 @@ build/
 vault.key
 vault.bin
 browser-1.0.0-source.zip
+browser-1.0.0-standalone.zip
+dist/
+browser.spec
