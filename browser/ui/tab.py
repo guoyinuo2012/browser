@@ -58,6 +58,95 @@ class BrowserPage(QWebEnginePage):
         return super().acceptNavigationRequest(url, type_, is_main_frame)
 
 
+class WebView(QWebEngineView):
+    """View with browser's page context menu (Lens search, copy, open)."""
+
+    def contextMenuEvent(self, ev) -> None:  # noqa: N802
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtWidgets import QMenu
+        from ..core.share import lens_image_url
+        from .. import constants
+
+        view: QWebEngineView = self
+        req = view.lastContextMenuRequest()
+        menu = QMenu(self)
+
+        engine = "Google"
+        try:
+            engine = self._tab_services.engine_name() or "Google"
+        except Exception:
+            pass
+
+        if req is not None:
+            sel = (req.selectedText() or "").strip()
+            if sel:
+                q = quote(sel[:300], safe="")
+                menu.addAction(f"Search \u201c{sel[:40]}\u201d with {engine}",
+                               lambda: QDesktopServices.openUrl(QUrl(
+                                   f"https://www.google.com/search?q={q}")))
+                menu.addAction("Copy", self.copy)
+                menu.addSeparator()
+            if req.mediaType() == req.MediaType.MediaTypeImage and \
+                    not req.mediaUrl().isEmpty():
+                img = req.mediaUrl().toString()
+                menu.addAction("Search image with Google Lens",
+                               lambda: QDesktopServices.openUrl(QUrl(
+                                   lens_image_url(img))))
+                menu.addAction("Open image in new tab",
+                               lambda: self._open_in_new_tab(img))
+                menu.addAction("Copy image address",
+                               lambda: QApplication.clipboard().setText(img))
+                menu.addSeparator()
+            link = req.linkUrl().toString()
+            if link and not link.startswith("browser:"):
+                menu.addAction("Open link in new tab",
+                               lambda: self._open_in_new_tab(link))
+                menu.addAction("Copy link address",
+                               lambda: QApplication.clipboard().setText(link))
+                menu.addAction("Search link with Google Lens",
+                               lambda: QDesktopServices.openUrl(QUrl(
+                                   lens_image_url(link))))
+                menu.addSeparator()
+
+        # navigation essentials + Chromium's standard items
+        page = self.page()
+        wa = page.action(page.WebAction.Back)
+        menu.addAction(wa)
+        menu.addAction(page.action(page.WebAction.Forward))
+        menu.addAction(page.action(page.WebAction.ReloadAndBypassCache))
+        menu.addSeparator()
+        menu.addAction("Save page as\u2026", lambda: self._tab_action("save"))
+        menu.addAction("Print\u2026", lambda: self._tab_action("print"))
+        menu.addSeparator()
+        menu.addAction("Inspect element", lambda: self._tab_action("inspect"))
+        menu.addAction("View page source", lambda: self._tab_action("source"))
+        menu.addSeparator()
+        std = view.createStandardContextMenu()
+        for act in std.actions():
+            menu.addAction(act)
+        menu.exec(ev.globalPos())
+
+    # helpers wired lazily by WebTab ------------------------------------ #
+    def _tab_services(self):
+        return self._tab.services
+
+    def _open_in_new_tab(self, url: str) -> None:
+        self._tab.open_new_tab.emit(url, False)
+
+    def _tab_action(self, what: str) -> None:
+        w = self._tab.window
+        if w is None:
+            return
+        if what == "save":
+            w._save_page()
+        elif what == "print":
+            w._print()
+        elif what == "inspect":
+            w._inspect()
+        elif what == "source":
+            w._view_source()
+
+
 class WebTab(QWidget):
     """One tab: view + page + chrome state (pinned/group/muted)."""
 
@@ -100,7 +189,8 @@ class WebTab(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.view = QWebEngineView(self)
+        self.view = WebView(self)
+        self.view._tab = self
         layout.addWidget(self.view)
         self.setLayout(layout)
 

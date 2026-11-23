@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
     QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QSizePolicy,
     QStackedWidget, QStatusBar, QSystemTrayIcon, QTabBar, QTabWidget,
-    QToolBar, QToolButton, QVBoxLayout, QWidget)
+    QToolBar, QToolButton, QVBoxLayout, QWidget, QWidgetAction)
 
 from ..constants import *
 from ..core.bookmarks_import import export_bookmarks_html, import_bookmarks_html
@@ -654,95 +654,208 @@ class BrowserWindow(QMainWindow):
 
     # -- menus ---------------------------------------------------------------
     def _show_menu(self) -> None:
+        """Main (three-dots style) menu, mirroring the modern browser layout."""
         menu = QMenu(self)
-        # File
-        m = menu.addMenu("File")
-        m.addAction("New tab", "Ctrl+T", lambda: self.new_tab())
-        m.addAction("New window", "Ctrl+N", self._new_window)
-        m.addAction("New private window", "Ctrl+Shift+N", self._new_private_window)
+        # -- quick window actions --------------------------------------- #
+        top = menu.addMenu("New")
+        top.addAction("New tab", "Ctrl+T", lambda: self.new_tab())
+        top.addAction("New window", "Ctrl+N", self._new_window)
+        top.addAction("New private window", "Ctrl+Shift+N", self._new_private_window)
+        top.addAction("Open file\u2026", "Ctrl+O", self._open_file)
+
+        # -- data sections (like the modern menu) ------------------------ #
+        m = menu.addMenu("Passwords and autofill")
+        m.addAction("Show saved passwords",
+                    lambda: self.open_internal(URL_PASSWORDS))
+        m.addAction("Password generator\u2026", lambda: self.open_internal(
+            URL_PASSWORDS + "?action=generate"))
+        m.addAction("Lock vault now", self._lock_vault)
+
+        m = menu.addMenu("History")
+        for entry in self._recent_history(8):
+            m.addAction(entry["title"][:50] or entry["url"][:50],
+                        lambda e=entry: self.new_tab(e["url"]))
+        if m.actions():
+            m.addSeparator()
+        m.addAction("Show all history", "Ctrl+H",
+                    lambda: self.open_internal(URL_HISTORY))
+
+        m = menu.addMenu("Downloads")
+        m.addAction("Show downloads", "Ctrl+J",
+                    lambda: self.open_internal(URL_DOWNLOADS))
+        m.addAction("Clear download records", self._clear_download_records)
+
+        m = menu.addMenu("Bookmarks and lists")
+        m.addAction("Bookmark this page", "Ctrl+D", self._toggle_bookmark)
+        m.addAction("Show all bookmarks", "Ctrl+Alt+B",
+                    lambda: self.open_internal(URL_BOOKMARKS))
         m.addSeparator()
-        m.addAction("Open file…", "Ctrl+O", self._open_file)
-        m.addAction("Save page as…", "Ctrl+S", self._save_page)
-        m.addAction("Print…", "Ctrl+P", self._print)
-        m.addAction("Save as PDF…", self._print_pdf)
-        m.addSeparator()
-        m.addAction("Quit", "Ctrl+Q", QApplication.instance().quit)
-        # Edit
-        m = menu.addMenu("Edit")
-        m.addAction("Find in page…", "Ctrl+F", self.findbar.open_bar)
+        m.addAction("Import bookmarks (HTML)\u2026", self._import_bookmarks)
+        m.addAction("Export bookmarks (HTML)\u2026", self._export_bookmarks)
+
+        m = menu.addMenu("Tab groups")
+        tab = self.current_tab()
+        if tab is not None and self.tabs:
+            idx = self.tabs.index(tab)
+            gmenu = m.addMenu(f"Move \u201c{(tab.page.title() or 'This tab')[:30]}\u201d to group")
+            gmenu.addAction("No group",
+                            lambda: self.tabwidget.group_selected.emit(idx, ""))
+            for g in self.group_names():
+                gmenu.addAction(f"\u25cf {g}",
+                                lambda gg=g, i=idx: self.tabwidget.group_selected.emit(i, gg))
+            gmenu.addSeparator()
+            gmenu.addAction("New group\u2026",
+                            lambda: self.tabwidget._new_group(idx))
+        hint = m.addAction("(Also available: right-click a tab)")
+        hint.setEnabled(False)
+
+        ext_menu = self._extensions_menu(menu)
+        if ext_menu is None:
+            ext_menu = QMenu("Extensions", menu)
+            ext_menu.addAction("Manage extensions\u2026",
+                               lambda: self.open_internal(URL_EXTENSIONS))
+        menu.addMenu(ext_menu)
+
+        menu.addAction("Delete browsing data\u2026", "Ctrl+Shift+Del",
+                       self._open_clear_data)
+        menu.addSeparator()
+
+        # -- zoom row ---------------------------------------------------- #
+        wa = QWidgetAction(menu)
+        wa.setDefaultWidget(self._zoom_row_widget())
+        menu.addAction(wa)
+        menu.addSeparator()
+
+        # -- page actions ------------------------------------------------ #
+        menu.addAction("Print\u2026", "Ctrl+P", self._print)
+        menu.addAction("Search this tab with Google Lens", self._search_lens)
+        menu.addAction("Translate\u2026", self._translate)
+        m = menu.addMenu("Find and edit")
+        m.addAction("Find in page\u2026", "Ctrl+F", self.findbar.open_bar)
         m.addSeparator()
         m.addAction("Cut", "Ctrl+X", lambda: self._page_action(QWebEnginePage.WebAction.Cut))
         m.addAction("Copy", "Ctrl+C", lambda: self._page_action(QWebEnginePage.WebAction.Copy))
         m.addAction("Paste", "Ctrl+V", lambda: self._page_action(QWebEnginePage.WebAction.Paste))
         m.addAction("Select all", "Ctrl+A", lambda: self._page_action(QWebEnginePage.WebAction.SelectAll))
-        # View
-        m = menu.addMenu("View")
-        m.addAction("Reload", "F5", self._reload)
-        m.addAction("Stop", "Esc", lambda: self.current_tab() and self.current_tab().stop())
+
+        m = menu.addMenu("Save, share and cast")
+        m.addAction("Save page as\u2026", "Ctrl+S", self._save_page)
+        m.addAction("Save as PDF\u2026", self._print_pdf)
         m.addSeparator()
-        m.addAction("Zoom in", "Ctrl++", lambda: self.current_tab() and self.current_tab().zoom_in())
-        m.addAction("Zoom out", "Ctrl+-", lambda: self.current_tab() and self.current_tab().zoom_out())
-        m.addAction("Reset zoom", "Ctrl+0", lambda: self.current_tab() and self.current_tab().zoom_reset())
+        m.addAction("Copy page link", self._copy_page_link)
+        m.addAction("Email link\u2026", self._email_link)
+        m.addAction("QR code for this page", self._qr_current)
         m.addSeparator()
+        cast = m.addAction("Cast\u2026")
+        cast.setEnabled(False)
+        cast.setToolTip("Not supported by this engine (QtWebEngine)")
+
+        m = menu.addMenu("More tools")
+        m.addAction("Developer tools", "F12", self._open_devtools)
+        m.addAction("Inspect element", "Ctrl+Shift+I", self._inspect)
+        m.addAction("View page source", "Ctrl+U", self._view_source)
+        m.addAction("Screenshot visible page\u2026", self._screenshot)
+        m.addAction("Reader mode", "Alt+R", self._reader_mode)
+        m.addSeparator()
+        m.addAction("Privacy dashboard", lambda: self.open_internal(URL_PRIVACY))
+        m.addAction("Security dashboard", lambda: self.open_internal(URL_SECURITY))
+        m.addAction("Permissions", lambda: self.open_internal(URL_PERMISSIONS))
+        m.addSeparator()
+        m.addAction("Search open tabs\u2026", "Ctrl+Shift+A", self._tab_search)
         vtabs = m.addAction("Vertical tabs")
         vtabs.setCheckable(True)
         vtabs.setChecked(self.settings.get("appearance.vertical_tabs"))
         vtabs.toggled.connect(self._toggle_vertical_tabs)
-        bb = m.addAction("Bookmarks bar")
-        bb.setCheckable(True)
-        bb.setChecked(self.bookmarks_bar.isVisible())
-        bb.toggled.connect(self._toggle_bookmarks_bar)
-        m.addSeparator()
-        m.addAction("Reader mode", "Alt+R", self._reader_mode)
-        m.addAction("Full screen", "F11", self._toggle_fullscreen)
-        m.addSeparator()
-        m.addAction("Developer tools", "F12", self._open_devtools)
-        m.addAction("Inspect element", "Ctrl+Shift+I", self._inspect)
-        m.addAction("View page source", "Ctrl+U", self._view_source)
-        # History
-        m = menu.addMenu("History")
-        m.addAction("Show all history", "Ctrl+H", lambda: self.open_internal(URL_HISTORY))
-        recent = m.addMenu("Recently closed")
-        for entry in reversed(self.closed_tabs[-10:]):
-            recent.addAction(entry["title"][:50] or entry["url"][:50],
-                             lambda e=entry: self.new_tab(e["url"]))
-        if not self.closed_tabs:
-            recent.addAction("(empty)").setEnabled(False)
-        m.addSeparator()
-        m.addAction("Clear browsing data…", "Ctrl+Shift+Del", self._open_clear_data)
-        # Bookmarks
-        m = menu.addMenu("Bookmarks")
-        m.addAction("Bookmark this page", "Ctrl+D", self._toggle_bookmark)
-        m.addAction("Show all bookmarks", "Ctrl+Alt+B",
-                    lambda: self.open_internal(URL_BOOKMARKS))
-        m.addSeparator()
-        m.addAction("Import bookmarks (HTML)…", self._import_bookmarks)
-        m.addAction("Export bookmarks (HTML)…", self._export_bookmarks)
-        # Downloads
-        m = menu.addMenu("Downloads")
-        m.addAction("Show downloads", "Ctrl+J", lambda: self.open_internal(URL_DOWNLOADS))
-        m.addAction("Clear download records", self._clear_download_records)
-        # Tools
-        m = menu.addMenu("Tools")
-        m.addAction("Privacy dashboard", lambda: self.open_internal(URL_PRIVACY))
-        m.addAction("Security dashboard", lambda: self.open_internal(URL_SECURITY))
-        m.addAction("Permissions", lambda: self.open_internal(URL_PERMISSIONS))
-        m.addAction("Extensions", lambda: self.open_internal(URL_EXTENSIONS))
-        exts_menu = self._extensions_menu(menu)
-        if exts_menu is not None:
-            m.addMenu(exts_menu)
-        m.addAction("Passwords", lambda: self.open_internal(URL_PASSWORDS))
-        m.addSeparator()
-        m.addAction("Search open tabs…", "Ctrl+Shift+A", self._tab_search)
-        m.addAction("Screenshot visible page…", self._screenshot)
-        m.addAction("Translate this page…", self._translate)
-        m.addSeparator()
-        m.addAction("Settings…", "Ctrl+,", self.open_settings)
-        # Help
+
+        # -- bottom row -------------------------------------------------- #
+        menu.addSeparator()
         m = menu.addMenu("Help")
         m.addAction(f"About {APP_NAME}", lambda: self.open_internal(URL_ABOUT))
-        m.addAction("Check for updates…", self._check_updates)
+        m.addAction("Check for updates\u2026", self._check_updates)
+        menu.addAction("Settings\u2026", "Ctrl+,", self.open_settings)
+        menu.addAction("Exit", "Ctrl+Q", QApplication.instance().quit)
         menu.exec(self.menu_btn.mapToGlobal(QPoint(0, self.menu_btn.height())))
+
+    def _recent_history(self, limit: int) -> list:
+        try:
+            return self.store.search_history("", limit)
+        except Exception:
+            return []
+
+    def _zoom_row_widget(self) -> QWidget:
+        row = QWidget()
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(10, 4, 10, 4)
+        lay.addWidget(QLabel("Zoom"))
+        lay.addStretch(1)
+        t = self.current_tab()
+        zoom_pct = int(round(t.view.zoomFactor() * 100)) if t is not None else 100
+        out_btn = QPushButton("\u2212")
+        out_btn.setFixedWidth(32)
+        out_btn.clicked.connect(lambda: self.current_tab() and self.current_tab().zoom_out())
+        lay.addWidget(out_btn)
+        self._zoom_label = QLabel(f"{zoom_pct}%")
+        self._zoom_label.setFixedWidth(44)
+        self._zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self._zoom_label)
+        in_btn = QPushButton("+")
+        in_btn.setFixedWidth(32)
+        in_btn.clicked.connect(lambda: self.current_tab() and self.current_tab().zoom_in())
+        lay.addWidget(in_btn)
+        fs_btn = QPushButton("\u26f6")
+        fs_btn.setFixedWidth(32)
+        fs_btn.setToolTip("Full screen (F11)")
+        fs_btn.clicked.connect(lambda: self._toggle_fullscreen())
+        lay.addWidget(fs_btn)
+        return row
+
+    def _refresh_zoom_label(self) -> None:
+        t = self.current_tab()
+        lbl = getattr(self, "_zoom_label", None)
+        if lbl is not None and t is not None:
+            lbl.setText(f"{int(round(t.view.zoomFactor() * 100))}%")
+
+    def _search_lens(self) -> None:
+        """Google Lens on this tab's best image (or the Lens upload page)."""
+        t = self.current_tab()
+        if t is None:
+            return
+        from PyQt6.QtGui import QDesktopServices
+        from ..core.share import LENS_IMAGE_JS, lens_image_url, lens_page_url
+
+        def go(img) -> None:
+            QDesktopServices.openUrl(QUrl(
+                lens_image_url(img) if img else lens_page_url()))
+        t.page.runJavaScript(LENS_IMAGE_JS, go)
+
+    def _copy_page_link(self) -> None:
+        t = self.current_tab()
+        if t is None:
+            return
+        title = t.page.title() or ""
+        QApplication.clipboard().setText(
+            f"{title}\n{t.url_string}" if title else t.url_string)
+
+    def _email_link(self) -> None:
+        t = self.current_tab()
+        if t is None:
+            return
+        from PyQt6.QtGui import QDesktopServices
+        from ..core.share import email_share_url
+        QDesktopServices.openUrl(QUrl(email_share_url(
+            t.url_string, t.page.title())))
+
+    def _qr_current(self) -> None:
+        t = self.current_tab()
+        if t is None:
+            return
+        from urllib.parse import quote
+        self.new_tab(f"{SCHEME_STR}://qr?url={quote(t.url_string, safe='')}")
+
+    def _lock_vault(self) -> None:
+        v = self.app_state.vault
+        if v is not None and hasattr(v, "lock"):
+            v.lock()
 
     def _extensions_menu(self, parent_menu) -> Optional[QMenu]:
         """Per-site quick toggles for extensions on the current page."""
@@ -754,7 +867,7 @@ class BrowserWindow(QMainWindow):
         if u.scheme() not in ("http", "https"):
             return None
         host = u.host()
-        menu = QMenu("Extensions on this site", parent_menu)
+        menu = QMenu("Extensions", parent_menu)
         for ext in exts.all():
             label = ext.name
             act = menu.addAction(label)

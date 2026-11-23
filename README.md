@@ -55,6 +55,14 @@ instead; compatibility claims are never faked.
 - [x] Reader mode, find in page, zoom (per-host persistence), print/PDF,
       save page (MHTML/HTML), screenshot, translate (via provider page),
       fullscreen, PiP via the page's own controls, DevTools
+- [x] **Modern three-dots menu**: passwords/autofill, history (with recent
+      pages), downloads, bookmarks and lists, tab groups, extensions,
+      delete-data, zoom row (−/+ %/fullscreen), print, Google Lens,
+      translate, find-and-edit, save/share (copy link, email link, QR),
+      more tools, help, settings, exit
+- [x] **Page context menu (right-click)**: search selection with your
+      engine, **search image with Google Lens**, open image/link in new
+      tab, copy image/link address, save/print, inspect, view source
 
 ### Privacy
 - [x] **Built-in extensions** (bundled, disable-able per site, can't be
@@ -117,7 +125,7 @@ python main.py https://example.com
 python -m unittest discover -s browser/tests -v
 ```
 
-109 tests cover: privacy blocking decisions, cookie policy, HTTPS-first,
+117 tests cover: privacy blocking decisions, cookie policy, HTTPS-first,
 safe browsing, download classification, cert gate, vault crypto
 (encrypted-at-rest, master password, auto-lock, CSV roundtrip), storage
 (history/bookmarks/downloads), tracker lists, URL detection, QR encoding
