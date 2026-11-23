@@ -108,6 +108,21 @@ instead; compatibility claims are never faked.
 - [x] Keyboard-only navigation, visible focus, screen-reader support via Qt
 - [x] Cross-platform: Windows 10/11, macOS, Linux
 
+## Launching
+
+After building (or unzipping the standalone package), start the browser
+from the launcher files in the app folder:
+
+| File | What it does |
+|---|---|
+| `browser.exe` | The browser itself (double-click) |
+| `Start browser.bat` | Launches with a console window; forwards arguments |
+| `Start browser (silent).vbs` | Launches with no console flash; forwards arguments |
+| `Start private window.bat` | Launches directly into a private window |
+
+These use relative paths, so the folder can be moved anywhere and the
+launchers keep working.
+
 ## Run from source
 
 Requirements: Python 3.10+ and QtWebEngine.
