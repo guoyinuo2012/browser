@@ -113,7 +113,7 @@ class ListManager:
         try:
             self.list_file(list_id).unlink()
         except OSError:
-            pass
+            pass    # list file may already be gone; state is what matters
         self.rebuild()
 
     def touch_updated(self, list_id: str, rule_count: int) -> None:

@@ -792,7 +792,7 @@ class BrowserWindow(QMainWindow):
         zoom_pct = int(round(t.view.zoomFactor() * 100)) if t is not None else 100
         out_btn = QPushButton("\u2212")
         out_btn.setFixedWidth(32)
-        out_btn.clicked.connect(lambda: self.current_tab() and self.current_tab().zoom_out())
+        out_btn.clicked.connect(self._zoom_out_clicked)
         lay.addWidget(out_btn)
         self._zoom_label = QLabel(f"{zoom_pct}%")
         self._zoom_label.setFixedWidth(44)
@@ -800,7 +800,7 @@ class BrowserWindow(QMainWindow):
         lay.addWidget(self._zoom_label)
         in_btn = QPushButton("+")
         in_btn.setFixedWidth(32)
-        in_btn.clicked.connect(lambda: self.current_tab() and self.current_tab().zoom_in())
+        in_btn.clicked.connect(self._zoom_in_clicked)
         lay.addWidget(in_btn)
         fs_btn = QPushButton("\u26f6")
         fs_btn.setFixedWidth(32)
@@ -808,6 +808,19 @@ class BrowserWindow(QMainWindow):
         fs_btn.clicked.connect(lambda: self._toggle_fullscreen())
         lay.addWidget(fs_btn)
         return row
+
+    def _zoom_step(self, direction: int) -> None:
+        t = self.current_tab()
+        if t is None:
+            return
+        t.zoom_in() if direction > 0 else t.zoom_out()
+        self._refresh_zoom_label()
+
+    def _zoom_in_clicked(self) -> None:
+        self._zoom_step(+1)
+
+    def _zoom_out_clicked(self) -> None:
+        self._zoom_step(-1)
 
     def _refresh_zoom_label(self) -> None:
         t = self.current_tab()

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import secrets
 import sys
 from pathlib import Path
 
@@ -22,11 +21,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 def canonical(manifest: dict) -> bytes:
+    """Canonical JSON of a manifest: all fields except signature, sorted."""
     payload = {k: manifest[k] for k in sorted(manifest) if k != "signature"}
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def main() -> int:
+    """Sign (or generate a key for) an update manifest."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--private-key", required=False, help="hex file; generated if missing")
     ap.add_argument("--version", required=True)

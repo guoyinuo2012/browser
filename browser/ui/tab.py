@@ -65,7 +65,6 @@ class WebView(QWebEngineView):
         from PyQt6.QtGui import QDesktopServices
         from PyQt6.QtWidgets import QMenu
         from ..core.share import lens_image_url
-        from .. import constants
 
         view: QWebEngineView = self
         req = view.lastContextMenuRequest()
@@ -75,7 +74,7 @@ class WebView(QWebEngineView):
         try:
             engine = self._tab_services.engine_name() or "Google"
         except Exception:
-            pass
+            pass    # engine label is cosmetic; default to "Google"
 
         if req is not None:
             sel = (req.selectedText() or "").strip()
@@ -586,12 +585,13 @@ a {{ color: inherit; }}
 
     # ------------------------------------------------------------------ #
     def shutdown(self) -> None:
+        """Detach the page and schedule Qt-side teardown."""
         try:
             self.page.setParent(None)
             self.page.deleteLater()
             self.deleteLater()
         except RuntimeError:
-            pass
+            pass    # C++ object already destroyed during teardown
 
 
 def _feature_name(feature) -> str:
