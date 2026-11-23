@@ -108,6 +108,12 @@ instead; compatibility claims are never faked.
 - [x] Keyboard-only navigation, visible focus, screen-reader support via Qt
 - [x] Cross-platform: Windows 10/11, macOS, Linux
 
+## Download the ready-made build
+
+A standalone Windows build (no Python needed — unzip and run) is attached to
+the v1.0.0 release: <https://github.com/guoyinuo2012/browser/releases/latest>
+(`browser-1.0.0-standalone.zip`, ~228 MB compressed).
+
 ## Launching
 
 After building (or unzipping the standalone package), start the browser
