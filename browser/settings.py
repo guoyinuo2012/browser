@@ -19,12 +19,9 @@ from . import paths
 
 DEFAULTS: Dict[str, Any] = {
     # -- General -------------------------------------------------------------
-    "general.startup_page": "home",           # home | restore | blank | custom
-    "general.custom_homepage": "https://duckduckgo.com",
+    "general.startup_page": "home",           # home | restore | blank
     "general.new_tab_page": "home",           # home | blank
     "general.ask_on_close_multiple_tabs": True,
-    "general.confirm_quit": False,
-    "general.language": "system",
     # -- Appearance ----------------------------------------------------------
     "appearance.theme": "system",             # dark | light | system
     "appearance.accent": "#4f8cff",
@@ -33,7 +30,6 @@ DEFAULTS: Dict[str, Any] = {
     "appearance.vertical_tabs": False,
     "appearance.show_bookmarks_bar": True,
     "appearance.compact_toolbar": False,
-    "appearance.wallpaper": "gradient",       # gradient | solid | none
     # -- Privacy -------------------------------------------------------------
     "privacy.level": "balanced",              # standard | balanced | strict
     "privacy.block_trackers": True,
@@ -58,7 +54,6 @@ DEFAULTS: Dict[str, Any] = {
     "security.safe_browsing_api_key": "",
     "security.download_warnings": True,
     "security.block_mixed_content": True,
-    "security.warn_insecure_password_fields": True,
     # -- Search --------------------------------------------------------------
     "search.default_engine": "DuckDuckGo",
     "search.custom_engines": [],              # [{name, url, suggest_url}]
@@ -69,7 +64,6 @@ DEFAULTS: Dict[str, Any] = {
     "tabs.ctrl_tab_cycle": True,
     "tabs.middle_click_close": True,
     "tabs.confirm_closing_pinned_group": True,
-    "tabs.tabs_per_group_limit": 0,
     # -- Downloads -----------------------------------------------------------
     "downloads.dir": "",                      # empty = OS Downloads folder
     "downloads.ask_where_to_save": False,
@@ -88,7 +82,6 @@ DEFAULTS: Dict[str, Any] = {
     "permissions.sites": {},                  # {origin: {feature: allow|block}}
     # -- Accessibility ---------------------------------------------------------
     "a11y.page_zoom_default": 1.0,
-    "a11y.font_scale": 1.0,
     "a11y.high_contrast": False,
     # -- Advanced --------------------------------------------------------------
     "advanced.javascript_enabled": True,
@@ -98,11 +91,9 @@ DEFAULTS: Dict[str, Any] = {
     "advanced.proxy_mode": "system",          # system | none | manual
     "advanced.proxy_server": "",
     "advanced.scan_command": "",              # local AV hook, %p = file path
-    "advanced.do_not_disturb_notifications": False,
     # -- Updates ---------------------------------------------------------------
     "updates.auto_check": True,
     "updates.manifest_url": "",               # user-provided signed manifest feed
-    "updates.channel": "stable",
     # -- Extensions --------------------------------------------------------------
     "extensions.enabled": {},                 # {ext_id: bool}
     "extensions.allow_in_private": [],        # ext ids approved for private windows

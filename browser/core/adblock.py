@@ -51,6 +51,7 @@ class ListManager:
         self.domain_of = domain_of
         self.engine = FilterEngine()
         self._updating: Dict[str, bool] = {}
+        self._paused_roots: frozenset = frozenset()
         self.on_lists_changed: Optional[Callable[[], None]] = None
 
     # ------------------------------------------------------------------ #

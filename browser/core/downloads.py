@@ -95,7 +95,9 @@ class DownloadManager(QObject):
             return
 
         risk = DownloadScreening.classify(suggested)
-        sb_note = SafeBrowsing(True).check_download_url(url)
+        sb_note = None
+        if self.settings.get("security.safe_browsing", True):
+            sb_note = SafeBrowsing(True).check_download_url(url)
         danger = ""
         note = ""
         if self.settings.get("security.download_warnings", True):
@@ -137,8 +139,9 @@ class DownloadManager(QObject):
 
         item = DownloadItem(did, request, self.store)
         self.active[did] = item
-        self.store.add_download(did, url, request.downloadDirectory() + "/" +
-                                request.downloadFileName(),
+        d = request.downloadDirectory() or target_dir
+        f = request.downloadFileName() or suggested
+        self.store.add_download(did, url, str(Path(d) / f),
                                 state="in_progress", total=request.totalBytes(),
                                 mime=mime)
         if danger:
@@ -179,18 +182,16 @@ class DownloadManager(QObject):
         if state == "completed":
             self._post_download_check(item)
             self.download_finished.emit(did, True)
-            self.active.pop(did, None)
         elif state in ("failed", "cancelled"):
             reason = item.request.interruptReasonString() if state == "failed" else ""
             if reason:
                 self.store.update_download(did, danger=f"failed: {reason}")
-            self.download_finished.emit(did, False)
-            if state != "failed" or not item.request.interruptReasonString():
-                self.active.pop(did, None)
-            else:
                 self.download_updated.emit(did)
+            self.download_finished.emit(did, False)
         else:
             self.download_updated.emit(did)
+            return
+        self.active.pop(did, None)
 
     def _post_download_check(self, item: DownloadItem) -> None:
         """Optional user-configured antivirus scan hook (runs locally)."""

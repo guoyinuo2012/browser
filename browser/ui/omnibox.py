@@ -17,11 +17,10 @@ from __future__ import annotations
 from typing import List, Optional
 
 from PyQt6.QtCore import (QAbstractListModel, QModelIndex, Qt,
-                          QUrl, pyqtSignal, QTimer, pyqtSlot)
+                          QUrl, pyqtSignal, QTimer)
 from PyQt6.QtGui import QFont, QPainter, QPalette
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from PyQt6.QtWidgets import (QLineEdit, QListView, QStyledItemDelegate,
-                             QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import QLineEdit, QListView, QStyledItemDelegate
 from PyQt6.QtWidgets import QStyle, QStyleOptionViewItem
 
 from ..core.search import normalize_input, parse_suggestions_osjson, BUILTIN_ENGINES
@@ -98,7 +97,6 @@ class Omnibox(QLineEdit):
     """Address bar: URL detection, suggestions, keyboard handling."""
     navigate_requested = pyqtSignal(str)      # final url to load
     open_in_new_tab = pyqtSignal(str, bool)   # url, background
-    cleared_data_shortcut = pyqtSignal()
 
     def __init__(self, services, parent=None):
         super().__init__(parent)
@@ -128,7 +126,6 @@ class Omnibox(QLineEdit):
         self.textEdited.connect(self._on_edited)
         self.returnPressed.connect(self._on_return)
         self.popup.clicked.connect(self._on_clicked)
-        self.cursorPositionChanged.connect(self._update_elide)
 
     # -- tab binding ---------------------------------------------------------
     def set_tab(self, tab) -> None:
@@ -140,9 +137,8 @@ class Omnibox(QLineEdit):
             self.setCursorPosition(0)
 
     def _update_elide(self) -> None:
-        # Keep the caret at the start for long URLs so the scheme is visible.
-        if self.cursorPosition() == len(self.text()) and self.text().startswith("http"):
-            pass
+        """Kept as a hook for future URL-eliding; currently a no-op."""
+        pass
 
     # -- events -----------------------------------------------------------------
     def keyPressEvent(self, ev) -> None:

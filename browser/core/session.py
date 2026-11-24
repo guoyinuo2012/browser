@@ -43,7 +43,7 @@ def mark_clean_exit(settings) -> None:
 
 
 def load(settings) -> List[List[Dict[str, Any]]]:
-    """Read the last session snapshot; returns None if absent/corrupt."""
+    """Read the last session snapshot; returns [] if absent/corrupt."""
     data = settings.get("internal.last_session", [])
     if not isinstance(data, list):
         return []

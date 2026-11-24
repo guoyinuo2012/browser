@@ -7,12 +7,13 @@ so handlers must be fast — all renderers are plain string builders.
 
 from __future__ import annotations
 
+import html
 import os
 import subprocess
 import sys
 import time
 import datetime as _dt
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote_plus, urlparse
 
 from PyQt6.QtCore import QUrl, pyqtSignal
 from PyQt6.QtWebEngineCore import QWebEngineUrlRequestJob, QWebEngineUrlSchemeHandler
@@ -48,6 +49,7 @@ class Services:
         self.current_cert = lambda: ""
         self.security = None            # SafeBrowsing
         self.downloader = None          # DownloadManager
+        self.interceptor_logic = None   # PrivacyInterceptor (page security)
 
 
 class SchemeHandler(QWebEngineUrlSchemeHandler):
@@ -64,14 +66,22 @@ class SchemeHandler(QWebEngineUrlSchemeHandler):
         host = url.host().decode() if isinstance(url.host(), bytes) else url.host()
         path = url.path()
         try:
-            html, mime, redirect = self._route(host, path, url)
+            html_out, mime, redirect = self._route(host, path, url)
         except Exception as exc:  # never let an internal error kill the tab
-            html, mime, redirect = self._error_reply(str(exc)), "text/html", None
+            html_out, mime, redirect = self._error_reply(str(exc)), "text/html", None
         if redirect:
             job.redirect(QUrl(redirect))
             return
         job.reply(mime.encode() if isinstance(mime, str) else mime,
-                  html.encode() if isinstance(html, str) else html)
+                  html_out.encode() if isinstance(html_out, str) else html_out)
+
+    def _error_reply(self, detail: str) -> str:
+        """Internal error page (never crashes the scheme handler)."""
+        body = f"""<div class=\"card\" style=\"margin-top:40px\">
+<h2 style=\"margin-top:0\">Internal page error</h2>
+<p class=\"mono small\">{html.escape(detail)}</p>
+<p><a class=\"btn\" href=\"browser://home\">Go home</a></p></div>"""
+        return pages.page("Error", body)
 
     # ------------------------------------------------------------------ #
     def _route(self, host: str, path: str, url: QUrl):
@@ -91,6 +101,8 @@ class SchemeHandler(QWebEngineUrlSchemeHandler):
 
         if host == "qr":
             target = g("url")
+            if not target:
+                return pages.message_page("QR code", "No URL to encode."), "text/html", None
             matrix = qr_encode(target)
             return to_svg(matrix), "image/svg+xml", None
 
@@ -242,7 +254,7 @@ class SchemeHandler(QWebEngineUrlSchemeHandler):
                 idx = int(g("id"))
                 entries = s.vault.all()
                 if 0 <= idx < len(entries):
-                    self.copied_password = entries[idx]["password"]
+                    self._copy_password(entries[idx]["password"])
                     return pages.password_copied_page(), "text/html", None
             except (ValueError, IndexError):
                 pass
@@ -261,6 +273,17 @@ class SchemeHandler(QWebEngineUrlSchemeHandler):
         return pages.passwords_page(
             entries, report, locked=False,
             uses_master=s.vault.uses_master_password()), "text/html", None
+
+    @staticmethod
+    def _copy_password(password: str) -> None:
+        """Copy to the system clipboard, auto-clearing it after 60 s so the
+        plaintext never lingers."""
+        from PyQt6.QtCore import QTimer
+        from PyQt6.QtWidgets import QApplication
+        cb = QApplication.clipboard()
+        cb.setText(password)
+        QTimer.singleShot(60_000, lambda: cb.clear()
+                          if cb.text() == password else None)
 
     # ------------------------------------------------------------------ #
     def _privacy(self):
@@ -383,15 +406,15 @@ class SchemeHandler(QWebEngineUrlSchemeHandler):
         return pages.adblock_page(
             bool(s.settings.get("adblock.enabled", True)),
             bool(s.settings.get("adblock.cosmetic", True)),
-            stats, ab.lists(), ab.paused_sites(), host)
+            stats, ab.lists(), ab.paused_sites(), host), "text/html", None
 
     # ------------------------------------------------------------------ #
     def _permissions(self, g):
+        from ..core.permissions import SENSITIVE, FEATURES
         s = self.s
         action = g("action")
         if action == "global":
             feature, value = g("feature"), g("value")
-            from ..core.permissions import SENSITIVE, FEATURES
             if feature in FEATURES and value in ("allow", "ask", "block"):
                 if not (feature in SENSITIVE and value == "allow"):
                     s.permissions.set_global_default(feature, value)
@@ -412,9 +435,3 @@ def _host_of(url: str) -> str:
         return ""
 
 
-def _error_reply(self, detail: str) -> str:
-        body = f"""<div class="card" style="margin-top:40px">
-<h2 style="margin-top:0">Internal page error</h2>
-<p class="mono small">{html.escape(detail)}</p>
-<p><a class="btn" href="browser://home">Go home</a></p></div>"""
-        return pages.page("Error", body)

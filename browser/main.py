@@ -21,7 +21,6 @@ from .core.session import crashed_last_run, load as load_session
 
 configure_engine()
 
-from PyQt6.QtCore import Qt
 import PyQt6.QtWebEngineWidgets  # noqa: F401 — must precede QApplication
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
@@ -61,8 +60,6 @@ def main() -> int:
     app.setApplicationDisplayName(constants.APP_NAME)
     app.setOrganizationName("browser")
     app.setApplicationVersion(constants.APP_VERSION)
-    # accessibility: let Qt speak to platform screen readers
-    app.setAttribute(Qt.ApplicationAttribute.AA_DisableWindowContextHelpButton, True)
 
     state = AppState()
 
@@ -112,6 +109,15 @@ def main() -> int:
     hk.setInterval(5000)
     hk.timeout.connect(housekeeping)
     hk.start()
+
+    # automatic update check: only against a feed the user configured and
+    # only if enabled; runs quietly after the window is up.
+    def _auto_update_check() -> None:
+        if (state.settings.get("updates.auto_check", True)
+                and state.settings.get("updates.manifest_url", "")):
+            state.check_updates(None)
+
+    QTimer.singleShot(30_000, _auto_update_check)
 
     # clear-on-exit rules live in close handlers; run them at quit too
     app.aboutToQuit.connect(state.persist_counters)

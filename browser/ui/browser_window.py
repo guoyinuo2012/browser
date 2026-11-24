@@ -13,13 +13,11 @@ from pathlib import Path
 from typing import Callable, List, Optional
 from urllib.parse import quote_plus
 
-from PyQt6.QtCore import (QPoint, QSize, Qt, QTimer, QUrl, pyqtSignal,
-                          pyqtSlot)
+from PyQt6.QtCore import (QPoint, QSize, Qt, QTimer, QUrl, pyqtSignal)
 from PyQt6.QtGui import QDesktopServices, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QSizePolicy,
-    QStackedWidget, QStatusBar, QSystemTrayIcon, QTabBar, QTabWidget,
+    QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QTabBar, QTabWidget,
     QToolBar, QToolButton, QVBoxLayout, QWidget, QWidgetAction)
 
 from ..constants import *
@@ -47,7 +45,7 @@ class TabBar(QTabBar):
         self.setElideMode(Qt.TextElideMode.ElideRight)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu)
-        self._middle_close = True
+        self._middle_close = bool(window.settings.get("tabs.middle_click_close", True))
 
     def mousePressEvent(self, ev) -> None:
         if self._middle_close and ev.button() == Qt.MouseButton.MiddleButton:
@@ -135,13 +133,13 @@ class FindBar(QFrame):
         self.edit.selectAll()
 
     def close_bar(self) -> None:
-        tab = self.window.current_tab
+        tab = self.window.current_tab()
         if tab:
             tab.find_clear()
         self.hide()
 
     def find(self, backward: bool = False, reset: bool = False) -> None:
-        tab = self.window.current_tab
+        tab = self.window.current_tab()
         if not tab:
             return
         text = self.edit.text()
@@ -289,8 +287,75 @@ class BrowserWindow(QMainWindow):
         self._apply_theme()
 
     # ------------------------------------------------------------------ #
-    # tab plumbing
+    # keyboard shortcuts (menu-only actions are not active until the menu
+    # opens, so the window registers its own window-wide shortcuts)
     # ------------------------------------------------------------------ #
+    def _add_shortcuts(self) -> None:
+        """Register the standard browser keyboard shortcuts."""
+        from PyQt6.QtGui import QAction, QKeySequence
+
+        def sc(seq, slot):
+            a = QAction(self)
+            a.setShortcut(QKeySequence(seq))
+            a.triggered.connect(slot)
+            self.addAction(a)
+            return a
+
+        sc("Ctrl+T", lambda: self.new_tab())
+        sc("Ctrl+N", self._new_window)
+        sc("Ctrl+Shift+N", self._new_private_window)
+        sc("Ctrl+O", self._open_file)
+        sc("Ctrl+W", lambda: self.close_tab(self.tabwidget.currentIndex()))
+        sc("Ctrl+Shift+T", self.restore_closed_tab)
+        sc("Ctrl+L", self._focus_omnibox)
+        sc("Alt+D", self._focus_omnibox)
+        sc("F6", self._focus_omnibox)
+        sc("Alt+Left", self._go_back)
+        sc("Alt+Right", self._go_forward)
+        sc("Ctrl+R", self._reload)
+        sc("F5", self._reload)
+        sc("Alt+Home", self._go_home)
+        sc("Ctrl+D", self._toggle_bookmark)
+        sc("Ctrl+F", self.findbar.open_bar)
+        sc("F3", lambda: self.findbar.find(False))
+        sc("Ctrl+G", lambda: self.findbar.find(False))
+        sc("Ctrl+Shift+G", lambda: self.findbar.find(True))
+        sc("Ctrl+J", lambda: self.open_internal(URL_DOWNLOADS))
+        sc("Ctrl+H", lambda: self.open_internal(URL_HISTORY))
+        sc("Ctrl+Alt+B", lambda: self.open_internal(URL_BOOKMARKS))
+        sc("Ctrl+P", self._print)
+        sc("Ctrl+S", self._save_page)
+        sc("Ctrl+U", self._view_source)
+        sc("F12", self._open_devtools)
+        sc("Ctrl+Shift+I", self._inspect)
+        sc("Ctrl+Shift+A", self._tab_search)
+        sc("Ctrl+Shift+Del", self._open_clear_data)
+        sc("Ctrl+,", self.open_settings)
+        sc("Alt+R", self._reader_mode)
+        sc("F11", lambda: self._toggle_fullscreen())
+        # Ctrl+Tab / Ctrl+Shift+Tab cycle (QTabWidget has no built-in)
+        if self.settings.get("tabs.ctrl_tab_cycle", True):
+            sc("Ctrl+Tab", lambda: self._cycle_tab(1))
+            sc("Ctrl+Shift+Tab", lambda: self._cycle_tab(-1))
+
+    def _cycle_tab(self, direction: int) -> None:
+        n = self.tabwidget.count()
+        if n < 2:
+            return
+        i = (self.tabwidget.currentIndex() + direction) % n
+        self.tabwidget.setCurrentIndex(i)
+
+    def _focus_omnibox(self) -> None:
+        self.omnibox.setFocus()
+        self.omnibox.selectAll()
+
+    def keyPressEvent(self, ev) -> None:
+        if self.isFullScreen() and ev.key() == Qt.Key.Key_Escape:
+            self.showNormal()
+            ev.accept()
+            return
+        super().keyPressEvent(ev)
+
     def _app_icon(self) -> QIcon:
         pm = QPixmap(64, 64)
         pm.fill(Qt.GlobalColor.transparent)
@@ -325,6 +390,7 @@ class BrowserWindow(QMainWindow):
         tab.popup_blocked.connect(self._on_popup_blocked)
         tab.save_password_prompt.connect(self._on_save_password)
         tab.permission_prompt.connect(self._on_permission_prompt)
+        tab.print_requested.connect(self._print)
         tab.close_requested.connect(lambda tt=tab: self.close_tab_for(tt))
         tab.fullscreen_requested.connect(self._on_fullscreen)
         tab.open_new_tab.connect(lambda u, bg, tt=tab: self.new_tab(u, background=bg))
@@ -337,7 +403,7 @@ class BrowserWindow(QMainWindow):
         tab = self._make_tab(url if url else (URL_HOME if self.settings.get(
             "general.new_tab_page") == "home" else "about:blank"))
         i = self.tabs.index(tab)
-        if after_current and self.settings.get("tabs.new_tab_position", "end") != "end" or after_current:
+        if after_current and self.settings.get("tabs.new_tab_position", "end") != "end":
             target = self.tabwidget.currentIndex() + 1
             self.tabwidget.moveTab(i, target)
             self.tabs.insert(target, self.tabs.pop(i))
@@ -357,9 +423,16 @@ class BrowserWindow(QMainWindow):
             return
         tab = self.tabs[idx]
         multi = len(self.tabs) > 1
-        if (not multi and not self.private
-                and self.settings.get("general.ask_on_close_multiple_tabs") is False):
-            pass
+        if (self.settings.get("tabs.confirm_closing_pinned_group", True)
+                and multi and tab.group_name
+                and tab.pinned
+                and any(t is not tab and t.group_name == tab.group_name
+                        for t in self.tabs)):
+            ret = QMessageBox.question(
+                self, APP_NAME,
+                f"Close the pinned tab in group “{tab.group_name}”?")
+            if ret != QMessageBox.StandardButton.Yes:
+                return
         if not multi and not self.private:
             # keep the window alive with a fresh tab
             self.closed_tabs.append({"url": tab.url_string, "title": tab.page.title()})
@@ -472,6 +545,16 @@ class BrowserWindow(QMainWindow):
     def _on_status(self, text: str) -> None:
         self.statusBar().showMessage(text, 4000)
 
+    def _on_popup_blocked(self, url: str) -> None:
+        self._on_status(f"Popup blocked: {url}")
+
+    def _on_fullscreen(self, on: bool) -> None:
+        """Site-initiated fullscreen (video player, games)."""
+        if on:
+            self.showFullScreen()
+        else:
+            self.showNormal()
+
     def _on_tab_switched(self, _i: int) -> None:
         tab = self.current_tab()
         self.omnibox.set_tab(tab)
@@ -513,6 +596,9 @@ class BrowserWindow(QMainWindow):
         w = QWidget()
         wl = QHBoxLayout(w)
         wl.setContentsMargins(6, 0, 6, 0)
+        self.sec_btn = btn("", "Connection security", self._show_security_info)
+        self.sec_btn.setFixedWidth(22)
+        wl.addWidget(self.sec_btn)
         wl.addWidget(self.omnibox)
         wl.setStretchFactor(self.omnibox, 1)
         self.toolbar.addWidget(w)
@@ -536,6 +622,11 @@ class BrowserWindow(QMainWindow):
         self._rebuild_bookmarks_bar()
 
         self.services.open_tabs = self.open_tabs
+        self.services.do_bookmark_export = self._export_bookmarks
+        self.services.do_bookmark_import = self._import_bookmarks
+        self.services.open_internal_page = self.open_internal
+        self.services.check_updates = self._check_updates
+        self.services.open_clear_data = self.open_clear_data
         self.services.current_url = lambda: (self.current_tab().url_string
                                              if self.current_tab() else "")
         self.services.current_https = lambda: (self.current_tab().url_string.startswith("https://")
@@ -547,6 +638,11 @@ class BrowserWindow(QMainWindow):
         self.services.request_unlock = self._request_unlock
         self.services.request_import_file = self._import_export_dispatch
         self.services.open_file = lambda p: QDesktopServices.openUrl(QUrl.fromLocalFile(p))
+
+    def _update_shield_tooltip(self, trackers, cookies, ads, requests_) -> None:
+        self.shield_btn.setToolTip(
+            f"Privacy dashboard — {trackers} trackers, {cookies} cookies, "
+            f"{ads} ads, {requests_} requests blocked this session")
 
     def _rebuild_bookmarks_bar(self) -> None:
         self.bookmarks_bar.clear()
@@ -612,11 +708,28 @@ class BrowserWindow(QMainWindow):
         t = self.current_tab()
         u = t.url_string if t else ""
         if u.startswith("https://"):
-            self.security_label = "🔒"
+            self.sec_btn.setText("🔒")
+            self.sec_btn.setToolTip("Connection is secure (HTTPS)")
         elif u.startswith("http://"):
-            self.security_label = "⚠"
+            self.sec_btn.setText("⚠")
+            self.sec_btn.setToolTip("Connection is NOT secure (HTTP)")
         else:
-            self.security_label = ""
+            self.sec_btn.setText("")
+            self.sec_btn.setToolTip("")
+
+    def _show_security_info(self) -> None:
+        t = self.current_tab()
+        if not t:
+            return
+        info = ("Connection is secure.\n\nThe site uses HTTPS and its "
+                "certificate was validated by Chromium. browser never "
+                "bypasses certificate errors.") \
+            if t.url_string.startswith("https://") else \
+            ("Connection is NOT secure.\n\nData sent over HTTP can be read "
+             "and modified by anyone on the network.") \
+            if t.url_string.startswith("http://") else ""
+        if info:
+            QMessageBox.information(self, APP_NAME, info)
 
     def _navigate(self, text: str) -> None:
         t = self.current_tab()
@@ -921,9 +1034,8 @@ class BrowserWindow(QMainWindow):
         self.app_state.open_window(private=True)
 
     def _open_external_window(self, url: str, private: bool) -> None:
-        w = self.app_state.open_window(private=private and not self.private)
-        if w is not self and url:
-            w.new_tab(url)
+        w = self.app_state.open_window(private=private and not self.private,
+                                       urls=[url] if url else None)
 
     def handle_new_window(self, tab: WebTab, request) -> None:
         """Synchronous popup/new-window handling (must attach a page)."""
@@ -1066,8 +1178,6 @@ class BrowserWindow(QMainWindow):
             return
         from ..core.qr import encode as qr_encode, to_svg
         svg = to_svg(qr_encode(t.url_string))
-        import base64
-        data = base64.b64encode(svg.encode()).decode()
         box = QDialog(self)
         box.setWindowTitle("QR code for this page")
         lay = QVBoxLayout(box)
@@ -1114,7 +1224,9 @@ class BrowserWindow(QMainWindow):
 
     def open_clear_data(self) -> None:
         d = dlg.ClearDataDialog(self.settings, self.store,
-                                [self.app_state.profile, self.app_state.private_profile], self)
+                                [self.app_state.profile, self.app_state.private_profile],
+                                vault=self.app_state.vault,
+                                counters=self.app_state.counters, parent=self)
         d.exec()
         self._rebuild_bookmarks_bar()
 
@@ -1206,8 +1318,6 @@ class BrowserWindow(QMainWindow):
         self.tabwidget.setTabPosition(
             QTabWidget.TabPosition.West if vertical else QTabWidget.TabPosition.North)
         self.tabbar.setObjectName("TabBarWest" if vertical else "TabBar")
-        self.tabbar.setOrientation(
-            Qt.Orientation.Vertical if vertical else Qt.Orientation.Horizontal)
 
     def _toggle_vertical_tabs(self, on: bool) -> None:
         self.settings.set("appearance.vertical_tabs", on)
@@ -1264,9 +1374,7 @@ class BrowserWindow(QMainWindow):
     def refresh_shield(self) -> None:
         trackers, cookies, ads, requests_, _sites = self.app_state.counters.snapshot()
         self.shield_btn.setText(f"🛡 {trackers + cookies + ads + requests_}")
-        self.shield_btn.setToolTip(
-            f"Privacy dashboard — {trackers} trackers, {cookies} cookies, "
-            f"{requests_} requests blocked this session")
+        self._update_shield_tooltip(trackers, cookies, ads, requests_)
 
     # ------------------------------------------------------------------ #
     def closeEvent(self, event) -> None:
@@ -1308,5 +1416,18 @@ class DevToolsWindow(QDialog):
     def attach(self, tab: WebTab) -> None:
         if self._attached is tab and self.view.page().devToolsId():
             return
+        if self._attached is not None and self._attached is not tab:
+            try:
+                self._attached.page.setDevToolsPage(None)
+            except RuntimeError:
+                pass    # previous tab already destroyed
         self._attached = tab
         tab.page.setDevToolsPage(self.view.page())
+
+    def closeEvent(self, event) -> None:
+        if self._attached is not None:
+            try:
+                self._attached.page.setDevToolsPage(None)
+            except RuntimeError:
+                pass    # tab already destroyed
+        super().closeEvent(event)

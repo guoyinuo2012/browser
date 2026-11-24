@@ -143,7 +143,6 @@ class CertGate:
         -202: "The server's certificate is not trusted (unknown authority).",
         -201: "The certificate's date is invalid or expired.",
         -200: "The certificate common name does not match the site address.",
-        -201 + 1000: "",  # placeholder
         -1: "The certificate could not be verified.",
     }
 

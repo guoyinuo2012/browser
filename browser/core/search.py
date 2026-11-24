@@ -102,7 +102,7 @@ def normalize_input(text: str, engine: SearchEngine) -> tuple[str, str]:
     if low in _KEYWORDS:
         eng = BUILTIN_ENGINES[_KEYWORDS[low]]
         return (eng.homepage, "url")
-    if t.startswith(_KEYWORDS.get(low[:2], "@@") and "@") and " " in t:
+    if t.startswith("@") and " " in t:
         kw, _, rest = t.partition(" ")
         eng_name = _KEYWORDS.get(kw.lower())
         if eng_name:

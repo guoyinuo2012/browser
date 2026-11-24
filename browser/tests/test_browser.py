@@ -28,6 +28,8 @@ from browser.core.search import normalize_input, looks_like_url, parse_suggestio
 from browser.core.qr import encode, to_svg, format_bits, version_bits, rs_encode, rs_syndromes
 from browser.core.session import snapshot, save, load, crashed_last_run, mark_clean_exit
 from browser.core.bookmarks_import import export_bookmarks_html, import_bookmarks_html
+from browser.pages import pages
+from browser.ui.tab import WebTab
 from browser.core.extensions import ExtensionManager
 from browser.core.permissions import PermissionManager
 from browser.core import updates
@@ -695,6 +697,96 @@ class EngineProbeTests(unittest.TestCase):
         msg = restriction_message(3221226505)
         self.assertIn("3221226505", msg)
         self.assertIn("normally", msg)
+
+
+class RegressionTests(unittest.TestCase):
+    """Bugs found in the full-code review: lock these behaviors in."""
+
+    def test_vault_master_rotation_preserves_data(self):
+        v = Vault(Path(_TMP) / "rot.bin", Path(_TMP) / "rot.key")
+        v.initialize(master="old-master")
+        v.add("example.com", "u", "CorrectHorse1!")
+        v.set_master_password("new-master")
+        v.add("example2.com", "u2", "Hunter2Hunter22")
+        v2 = Vault(Path(_TMP) / "rot.bin", Path(_TMP) / "rot.key")
+        self.assertTrue(v2.unlock("new-master"))
+        self.assertEqual(v2.find("example.com")["password"], "CorrectHorse1!")
+        self.assertEqual(v2.find("example2.com")["password"], "Hunter2Hunter22")
+
+    def test_vault_clear_all(self):
+        v = Vault(Path(_TMP) / "clr.bin", Path(_TMP) / "clr.key")
+        v.initialize()
+        v.add("a.com", "u", "CorrectHorse1!")
+        v.clear_all()
+        self.assertEqual(v.all(), [])
+
+    def test_scheme_handler_routes_are_well_formed(self):
+        """Every _route result must be (html, mime, redirect) — a bare page
+        return used to crash the browser://adblock service."""
+        from browser.pages.handler import SchemeHandler, Services
+        from browser.settings import Settings as S
+        from browser.core.privacy import Counters
+        from browser.core.adblock import ListManager
+        s = Services()
+        s.settings = S(Path(_TMP) / f"sh-{time.time()}.json")
+        s.counters = Counters()
+        s.adblock = ListManager(s.settings, Path(_TMP) / "ab",
+                                lambda u: u.rsplit(".", 2)[-2] if "." in u else u)
+        h = SchemeHandler(s)
+        out = h._route("adblock", "/", _FakeUrl("adblock", "/"))
+        self.assertEqual(len(out), 3)
+        self.assertTrue(out[0].startswith("<!DOCTYPE html>"))
+
+    def test_scheme_handler_unknown_host(self):
+        from browser.pages.handler import SchemeHandler, Services
+        from browser.settings import Settings as S
+        s = Services()
+        s.settings = S(Path(_TMP) / f"sh2-{time.time()}.json")
+        h = SchemeHandler(s)
+        out = h._route("nosuchpage", "/", _FakeUrl("nosuchpage", "/"))
+        self.assertEqual(len(out), 3)
+        self.assertIn("Not found", out[0])
+
+    def test_engine_error_reply_renders(self):
+        from browser.pages.handler import SchemeHandler, Services
+        h = SchemeHandler(Services())
+        html = h._error_reply("boom <script>")
+        self.assertIn("Internal page error", html)
+        self.assertNotIn("<script>", html)   # escaped
+
+    def test_qr_host_with_no_url_degrades(self):
+        from browser.pages.handler import SchemeHandler, Services
+        from browser.settings import Settings as S
+        s = Services()
+        s.settings = S(Path(_TMP) / f"sh3-{time.time()}.json")
+        h = SchemeHandler(s)
+        out = h._route("qr", "/", _FakeUrl("qr", "/"))
+        self.assertEqual(len(out), 3)
+        self.assertIn("No URL", out[0])
+
+    def test_store_update_history_title(self):
+        st = Store(Path(_TMP) / "title.db")
+        st.add_history("https://a.com/x", "")
+        st.update_history_title("https://a.com/x", "A page")
+        row = st.search_history("a.com")[0]
+        self.assertEqual(row["title"], "A page")
+        st.close()
+
+    def test_reader_mode_escapes_img_src(self):
+        js = WebTab.READER_JS
+        self.assertIn('replace(/"/g', js)  # attribute-breakout guard present
+
+
+class _FakeUrl:
+    """Minimal QUrl stand-in for SchemeHandler._route smoke tests."""
+    def __init__(self, host, path):
+        self._h, self._p = host, path
+    def query(self):
+        return b""
+    def host(self):
+        return self._h
+    def path(self):
+        return self._p
 
 
 if __name__ == "__main__":

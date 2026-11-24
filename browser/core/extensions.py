@@ -284,6 +284,27 @@ class ExtensionManager(QObject):
                 out.append((ext, js))
         return out
 
+    def css_for(self, url: str, private: bool, host: str = "") -> str:
+        """Combined stylesheet text from extensions active for this URL."""
+        out = []
+        for ext in self._extensions.values():
+            if not self.is_enabled(ext.id):
+                continue
+            if private and not (ext.wants_private() and self.allowed_in_private(ext.id)):
+                continue
+            if not _matches(ext.matches, url):
+                continue
+            if host:
+                pref = self.site_pref(ext.id, host)
+                if pref is False:
+                    continue
+                if not ext.default_on and pref is not True:
+                    continue
+            css = ext.css
+            if css:
+                out.append(f"/* {ext.id} */\n{css}")
+        return "\n\n".join(out)
+
 
 def _safe_id(ext_id: str) -> bool:
     return bool(ext_id) and all(c.isalnum() or c in "-_" for c in ext_id) and len(ext_id) <= 64

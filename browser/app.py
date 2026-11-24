@@ -9,15 +9,14 @@ persisted, and they are wiped when the last private window closes.
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from PyQt6.QtWebEngineCore import (
-    QWebEngineProfile, QWebEnginePage, QWebEngineUrlRequestInterceptor,
-    QWebEngineUrlScheme, QWebEngineCookieStore, QWebEngineScript,
-    QWebEngineUrlSchemeHandler)
+    QWebEngineProfile, QWebEngineUrlRequestInterceptor,
+    QWebEngineUrlScheme, QWebEngineCookieStore, QWebEngineScript)
 
 from . import paths, constants
 from .settings import Settings
@@ -41,6 +40,18 @@ def configure_engine() -> None:
 
     flags = []
     proxy = os.environ.get("BROWSER_PROXY", "")
+    if not proxy:
+        # Honor the user's proxy settings (manual mode) at startup; changing
+        # them requires a restart, like in other Chromium browsers.
+        try:
+            import json as _json
+            cfg = paths.config_file()
+            if cfg is not None and cfg.exists():
+                vals = _json.loads(cfg.read_text(encoding="utf-8"))
+                if vals.get("advanced.proxy_mode") == "manual":
+                    proxy = vals.get("advanced.proxy_server") or ""
+        except (OSError, ValueError):
+            pass    # unreadable settings simply mean no proxy flag
     if proxy:
         flags.append(f"--proxy-server={proxy}")
     if flags:
@@ -54,7 +65,6 @@ class _QtRequestInterceptor(QWebEngineUrlRequestInterceptor):
     def __init__(self, logic: PrivacyInterceptor, parent=None):
         super().__init__(parent)
         self.logic = logic
-        self._current: Dict[int, str] = {}
 
     def interceptRequest(self, info) -> None:  # noqa: N802
         url = info.requestUrl()
@@ -189,23 +199,21 @@ class AppState(QObject):
         return script
 
     def _cookie_filter(self, request) -> bool:
-        """QWebEngineCookieStore filter: returns True to allow the cookie."""
+        """QWebEngineCookieStore filter: returns True to allow the cookie.
+
+        All cookies go through the policy (including first-party ones) so
+        that "block all cookies" and per-site rules are enforced.
+        """
         first_party = request.firstPartyUrl().host() if request.firstPartyUrl().isValid() else ""
         origin = request.origin()
         host = origin.host() if origin.isValid() else ""
-        if request.thirdParty():
-            return self.logic.cookie_allowed(host, first_party, is_third_party=True)
-        return True
+        return self.logic.cookie_allowed(host, first_party,
+                                         is_third_party=request.thirdParty())
 
     def _create_private_profile(self) -> QWebEngineProfile:
         prof = QWebEngineProfile(None)   # no storage name = off-the-record
         self._setup_profile(prof, persistent=False)
-        self._inject_extensions(prof)
         return prof
-
-    def _inject_extensions(self, profile: QWebEngineProfile) -> None:
-        """Extension scripts run in the page world at document idle."""
-        pass  # scripts are injected per-tab (privacy scripts + extensions)
 
     def destroy_private_profile(self, profile) -> None:
         try:
@@ -231,6 +239,7 @@ class AppState(QObject):
         s.safe_browsing = self.safe_browsing
         s.downloader = self.downloader
         s.network = self.nam          # shared QNetworkAccessManager for list fetches
+        s.interceptor_logic = self.logic   # mixed-content page security reports
 
         def engine_name() -> str:
             return self.settings.get("search.default_engine", "DuckDuckGo")
@@ -330,7 +339,7 @@ class AppState(QObject):
                 parent, "browser",
                 "This update feed was never approved. The first check will ask "
                 "you to trust its signing key.")
-        nam = QNetworkAccessManager(parent)
+        nam = QNetworkAccessManager(self)   # parent to self: survive reply
         reply = nam.get(QNetworkRequest(QUrl(url)))
 
         def done() -> None:

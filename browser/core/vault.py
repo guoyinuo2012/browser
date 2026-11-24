@@ -193,6 +193,12 @@ class Vault:
         if not self.is_unlocked():
             raise VaultLocked("vault is locked")
 
+    def clear_all(self) -> None:
+        """Remove every saved login (Clear browsing data)."""
+        self._check()
+        self._logins.clear()
+        self._persist()
+
     def add(self, origin: str, username: str, password: str, note: str = "") -> int:
         self._check()
         # Update in place when origin+username already saved.
@@ -276,7 +282,8 @@ class Vault:
         data = self._read()
         self._write(self._logins, master, uses_master=bool(master),
                     iterations=data["iterations"])
-        self._key = self._derive_key(master, data["salt"], data["iterations"])
+        # Re-derive from the file just written: _write generated a fresh salt.
+        self._key = self._derive_key_for_open(master)
         self._uses_master = bool(master)
         self._unlocked_at = time.time()
         return True
@@ -301,13 +308,11 @@ class Vault:
     def export_encrypted(self, dest: Path) -> None:
         """Export is the encrypted vault itself; it is never plaintext."""
         self._check()
-        data = self._read()
         dest.write_bytes(self.path.read_bytes())
         try:
             os.chmod(dest, 0o600)
         except OSError:
             pass
-        _ = data
 
     def export_csv(self, dest: Path) -> int:
         """Plaintext CSV export — requires unlock and shows a strong warning.

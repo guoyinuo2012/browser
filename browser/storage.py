@@ -115,6 +115,11 @@ class Store:
             (url, title, host, visit_time if visit_time is not None else time.time()),
         )
 
+    def update_history_title(self, url: str, title: str) -> None:
+        """Set the title of every history row for this URL (titles arrive
+        after navigation, so they are usually stored empty first)."""
+        self._exec("UPDATE history SET title = ? WHERE url = ?", (title, url))
+
     def search_history(self, q: str, limit: int = 400) -> List[sqlite3.Row]:
         q = q.strip()
         if q:

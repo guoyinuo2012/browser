@@ -190,9 +190,50 @@ browser/
 
 ---
 
+# Changelog
+
+## v1.0.1 — full-code review and launch fixes
+**Launch fixes (the browser failed to open its window on every platform):**
+- Registered the window keyboard shortcuts (`_add_shortcuts`) — the method
+  was called but never implemented.
+- Removed a Qt-5-only application attribute that raised `AttributeError`
+  during startup.
+- Removed an invalid `QTabBar.setOrientation` call (Qt 6 has no such API);
+  vertical tabs keep working via the tab position.
+- Implemented the missing `_on_popup_blocked` / `_on_fullscreen` handlers.
+- Fixed a method-boundary bug that had split the toolbar builder.
+
+**Data-loss and crash fixes:**
+- `set_master_password` derived the new key from the *old* salt, silently
+  corrupting the vault on the next save. Regression-tested.
+- `browser://permissions` raised `UnboundLocalError`; `browser://adblock`
+  returned a malformed reply; `browser://qr` with no URL crashed; internal
+  routing errors now render an error page instead of failing the request.
+- Fixed a `NameError`-level routing bug when a list fetch produced invalid
+  data (`unquote_plus` import).
+
+**Correctness fixes:**
+- Password "Copy" now actually copies to the clipboard (auto-clears in 60 s).
+- "Clear saved passwords" now really deletes vault entries; privacy counters
+  reset stays reset (the 5-second housekeeping no longer resurrects them).
+- Extension stylesheets (`style.css` / `inject_css`) are now injected —
+  previously documented but dead code.
+- Mixed-content blocking now actually receives page-security reports.
+- HTTPS-First setting is read live (no restart needed per tab).
+- Download path recorded correctly when "ask where to save" is enabled;
+  Safe-Browsing screening honors its on/off setting.
+- Find bar worked only partially (uncalled `current_tab`); new-tab position
+  setting honored; Ctrl+Tab cycling implemented; middle-click close respects
+  its setting; pinned-group close confirm implemented; proxy settings are
+  honored at startup; automatic update check (only for a configured feed).
+- Security padlock badge added to the toolbar (it was computed but never
+  shown); light-theme detection fixed (was always reporting dark).
+- Dead settings removed; `privacy.level` now drives its individual toggles.
+- Reader mode escapes image URLs; history titles backfilled after load.
+
 # Privacy policy and architecture
 
-Last updated: v1.0.0
+Last updated: v1.0.1
 
 ## What browser collects
 

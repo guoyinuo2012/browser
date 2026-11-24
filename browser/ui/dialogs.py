@@ -11,10 +11,10 @@ from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMessageBox, QPushButton, QRadioButton, QScrollArea,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
     QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
-    QWidget, QGroupBox, QDoubleSpinBox, QToolButton, QStyle)
+    QWidget, QDoubleSpinBox, )
 
 from .. import paths
 from ..constants import APP_NAME, APP_VERSION
@@ -255,13 +255,16 @@ class TabSearchDialog(QDialog):
 class ClearDataDialog(QDialog):
     """Clear browsing data with time-range selection."""
 
-    def __init__(self, settings, store, profiles, parent=None):
+    def __init__(self, settings, store, profiles, vault=None, counters=None,
+                 parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"{APP_NAME} — clear browsing data")
         self.setModal(True)
         self.settings = settings
         self.store = store
         self.profiles = profiles   # list of QWebEngineProfile
+        self.vault = vault
+        self.counters = counters
         lay = QVBoxLayout(self)
         lay.addWidget(QLabel("Choose what to clear:"))
         self.cb_history = QCheckBox("Browsing history")
@@ -304,11 +307,11 @@ class ClearDataDialog(QDialog):
         if self.cb_downloads.isChecked():
             self.store.clear_downloads()
         if self.cb_passwords.isChecked():
-            try:
-                vault = self.profiles_vault if hasattr(self, "profiles_vault") else None
-            except Exception:
-                vault = None
-            # handled by the window via a callback attribute
+            if self.vault is not None:
+                try:
+                    self.vault.clear_all()
+                except Exception:
+                    pass    # locked vault: nothing readable to clear
         if self.cb_cookies.isChecked() or self.cb_cache.isChecked():
             for prof in self.profiles:
                 if prof.cookieStore() and not prof.isOffTheRecord():
@@ -317,7 +320,11 @@ class ClearDataDialog(QDialog):
                     prof.cookieStore().deleteSessionCookies()
                 if self.cb_cache.isChecked():
                     prof.clearHttpCache()
-        self.settings.set("internal.stats", {"trackers_blocked": 0, "cookies_blocked": 0,
+        if self.counters is not None:
+            self.counters.reset()
+        self.settings.set("internal.stats", {"trackers_blocked": 0,
+                                             "cookies_blocked": 0,
+                                             "ads_blocked": 0,
                                              "requests_blocked": 0}, save=False)
         self.settings.set("internal.stats_by_site", {}, save=False)
         self.settings.save()
@@ -545,16 +552,37 @@ class SettingsDialog(QDialog):
     def _page_privacy(self, lay) -> None:
         self._title(lay, "Privacy")
         self._section(lay, "Protection level")
-        lay.addWidget(self._combo("privacy.level",
-                                  [("standard", "Standard"), ("balanced", "Balanced"),
-                                   ("strict", "Strict")],
-                                  "Level:"))
-        note = QLabel("Balanced (default): blocks trackers and third-party cookies. "
+        note = QLabel("Changing the level also sets the individual options below. "
+                      "Balanced (default): blocks trackers and third-party cookies. "
                       "Strict additionally strengthens fingerprinting defenses and may "
                       "break some sites.")
         note.setWordWrap(True)
         note.setStyleSheet("color:#9aa2b1")
         lay.addWidget(note)
+
+        def level_changed(value: str) -> None:
+            """The level is a preset that drives the individual toggles."""
+            presets = {
+                "standard": {"privacy.block_trackers": False,
+                             "privacy.block_third_party_cookies": False,
+                             "privacy.anti_fingerprinting": "off"},
+                "balanced": {"privacy.block_trackers": True,
+                             "privacy.block_third_party_cookies": True,
+                             "privacy.anti_fingerprinting": "light"},
+                "strict":   {"privacy.block_trackers": True,
+                             "privacy.block_third_party_cookies": True,
+                             "privacy.anti_fingerprinting": "strict",
+                             "privacy.block_popups": True},
+            }
+            for k, v in presets.get(value, {}).items():
+                self.settings.set(k, v)
+        combo_box = self._combo("privacy.level",
+                                [("standard", "Standard"), ("balanced", "Balanced"),
+                                 ("strict", "Strict")],
+                                "Level:")
+        for child in combo_box.findChildren(QComboBox):
+            child.currentTextChanged.connect(level_changed)
+        lay.addWidget(combo_box)
         self._section(lay, "Tracking protection")
         lay.addWidget(self._check("privacy.block_trackers", "Block known trackers, ads and fingerprinting scripts"))
         lay.addWidget(self._check("privacy.block_third_party_cookies", "Block third-party cookies"))
@@ -702,7 +730,6 @@ class SettingsDialog(QDialog):
         self.dl_dir.editingFinished.connect(
             lambda: self.settings.set("downloads.dir", self.dl_dir.text().strip()))
         lay.addWidget(self._check("downloads.ask_where_to_save", "Ask where to save each file"))
-        lay.addWidget(self._check("downloads.warn_dangerous", "Warn about dangerous files"))
         self._section(lay, "Local antivirus hook (optional)")
         note = QLabel("Optional command to scan completed downloads. %p is the file path. "
                       "Runs locally; example: MpCmdRun.exe -Scan -ScanType 3 -File %p")

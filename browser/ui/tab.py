@@ -159,6 +159,7 @@ class WebTab(QWidget):
     open_new_window = pyqtSignal(str, bool)       # url, private
     status_message = pyqtSignal(str)
     blocked_count_changed = pyqtSignal()
+    print_requested = pyqtSignal()
     popup_blocked = pyqtSignal(str)
     save_password_prompt = pyqtSignal(str, str, str)   # origin, username, password
     permission_prompt = pyqtSignal(object, str, object)  # origin, feature, responder
@@ -181,8 +182,7 @@ class WebTab(QWidget):
         self.muted = False
         self.zoom_host = ""
 
-        self.https_first = bool(self.settings.get("security.https_first"))
-        self.upgrader = HTTPSFirstUpgrader(enabled=self.https_first)
+        self.upgrader = HTTPSFirstUpgrader()   # enabled flag read live below
         self.safe_browsing = services.safe_browsing
         self._cert_error_detail = ""
 
@@ -215,7 +215,12 @@ class WebTab(QWidget):
         p.newWindowRequested.connect(self._on_new_window)
         p.windowCloseRequested.connect(self.close_requested)
         p.renderProcessTerminated.connect(self._on_render_crash)
-        p.printRequested.connect(lambda: self.print_page())
+        p.printRequested.connect(self.print_requested.emit)
+
+    # -- security policy (read live so Settings changes apply immediately) --
+    @property
+    def https_first(self) -> bool:
+        return bool(self.settings.get("security.https_first"))
 
     # -- navigation ---------------------------------------------------------
     def load_url(self, url: str) -> None:
@@ -256,6 +261,7 @@ class WebTab(QWidget):
             host = self.page.url().host() if self.page.url().isValid() else ""
             title = host or "New tab"
         self.title_changed.emit(title)
+        self._refresh_history_title()
 
     def _on_url(self, url: QUrl) -> None:
         self.url_changed.emit(url)
@@ -265,6 +271,10 @@ class WebTab(QWidget):
             saved = self.settings.get("internal.zoom_by_host", {})
             factor = float(saved.get(host, self.settings.get("a11y.page_zoom_default", 1.0)))
             self.page.setZoomFactor(factor)
+        # report page security so mixed-content blocking can act on it
+        logic = getattr(self.services, "interceptor_logic", None)
+        if logic is not None and host:
+            logic.note_page_security(host, url.scheme() == "https")
         if self.is_private:
             return
         self._record_history(url)
@@ -275,6 +285,18 @@ class WebTab(QWidget):
             return
         if url.scheme() in ("http", "https"):
             self.store.add_history(s, self.page.title() or s)
+
+    def _refresh_history_title(self) -> None:
+        """Backfill the history title once the page title arrives (it is
+        usually empty at navigation time)."""
+        if self.is_private or not self.settings.get("history.enabled", True):
+            return
+        u = self.page.url()
+        if u.scheme() not in ("http", "https"):
+            return
+        title = self.page.title()
+        if title:
+            self.store.update_history_title(u.toString(), title)
 
     # -- load lifecycle --------------------------------------------------------
     def _on_load_finished(self, ok: bool) -> None:
@@ -316,16 +338,28 @@ class WebTab(QWidget):
         wr = webrtc_script(self.settings.get("privacy.webrtc_policy", "default"))
         if wr:
             scripts.append(wr)
-        # extension user scripts
+        # extension user scripts + stylesheets
         exts = self.services.extensions
         if exts is not None and self.page.url().scheme() in ("http", "https"):
             u = self.page.url()
             for _ext, js in exts.scripts_for(u.toString(), self.is_private,
                                              host=u.host()):
                 scripts.append(js)
+            css = exts.css_for(u.toString(), self.is_private, host=u.host())
+            if css:
+                self._inject_style(css)
         if scripts:
             combined = "\n;\n".join(scripts)
             self.page.runJavaScript(combined)
+
+    def _inject_style(self, css: str) -> None:
+        """Append a <style> element with extension CSS (escaped for JS)."""
+        safe = (css.replace("\\", "\\\\").replace("`", "\\`")
+                .replace("${", "\\${"))
+        js = ("(function(){var s=document.createElement('style');"
+              f"s.id='browser-extension-css';s.textContent=`{safe}`;"
+              "(document.head||document.documentElement).appendChild(s);})()")
+        self.page.runJavaScript(js)
 
     # -- passwords ---------------------------------------------------------------
     AUTOFILL_JS = """
@@ -488,8 +522,8 @@ class WebTab(QWidget):
         self.set_zoom(self.settings.get("a11y.page_zoom_default", 1.0))
 
     def print_page(self) -> None:
-        """Native print handled by the window via printToPdf."""
-        pass
+        """Browser-initiated print request: route to the window's print flow."""
+        self.print_requested.emit()
 
     def print_to_pdf(self, dest: str, callback=None) -> None:
         if callback is None:
@@ -528,7 +562,7 @@ class WebTab(QWidget):
       var tag = el.tagName.toLowerCase();
       if (tag === 'img') {
         var src = el.currentSrc || el.src;
-        if (src) out.push('<img src="' + src + '">');
+        if (src) out.push('<img src="' + src.replace(/"/g, '%22') + '">');
         return;
       }
       var text = (el.textContent || '').replace(/\\s+/g, ' ').trim();

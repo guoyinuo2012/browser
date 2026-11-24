@@ -209,8 +209,7 @@ def _convert(pattern: str) -> Tuple[str, str]:
         if not lit_done and (c in "*^|" or (c == "/" and len(lit) >= 4)):
             # stop the literal at the first wildcard; a '/' after a decent
             # prefix is a good stopping point too (pattern->path boundary)
-            if c in "*^|":
-                lit_done = True
+            lit_done = True
     return "".join(out), "".join(lit)
 
 

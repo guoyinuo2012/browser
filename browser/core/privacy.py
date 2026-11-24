@@ -136,11 +136,11 @@ class PrivacyInterceptor:
                     self.counters.hit("ad", host, first_party_host)
                     return True
 
-        # Mixed content: insecure subresources on a secure page.
+        # Mixed content: insecure subresources on a secure page. The page
+        # security state is reported by the UI layer via note_page_security.
         if pol.block_mixed_content and first_party_host:
             if url_scheme == "http" and not navigation:
-                # first-party https is tracked by caller; assume https page
-                if self._page_is_secure.get(first_party_host) if hasattr(self, "_page_is_secure") else False:
+                if self._page_is_secure.get(first_party_host):
                     self.counters.hit("request", host, first_party_host)
                     return True
 

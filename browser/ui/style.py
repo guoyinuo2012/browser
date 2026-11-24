@@ -7,6 +7,7 @@ everything, including internal pages.
 
 from __future__ import annotations
 
+import sys
 
 
 def _mix(c1: tuple, c2: tuple, t: float) -> str:
@@ -30,9 +31,23 @@ def system_is_dark() -> bool:
     """Detect the OS color scheme (dark preferred)."""
     try:
         import darkdetect
-        return darkdetect.isDark() != "Light"
-    except Exception:
-        return True
+        v = darkdetect.isDark()
+        if isinstance(v, str):              # older darkdetect returned strings
+            return v.lower() != "light"
+        return bool(v)
+    except ImportError:
+        pass
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
+                val, _ = winreg.QueryValueEx(k, "AppsUseLightTheme")
+            return val == 0                 # 0 = dark apps
+        except OSError:
+            return True
+    return True
 
 
 def build_qss(theme: str, accent: str = "#4f8cff", font_size: int = 14,
@@ -175,15 +190,4 @@ QToolBar#BookmarksBar QToolButton {{ padding: 4px 10px; color: {c['fg']}; max-wi
 /* downloads popup / panels */
 QWidget#Panel {{ background: {c['bg2']}; border: 1px solid {hc_border};
   border-radius: 12px; }}
-"""
-
-
-def accent_gradient_qss(accent: str) -> str:
-    """Extra QSS for accent-colored button gradients."""
-    a = _hex_to_rgb(accent)
-    return f"""
-#HomeWallpaper {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 {_mix(a, (16, 18, 22), 0.05)}, stop:1 {_mix((16, 18, 22), (0, 0, 0), 0.1)});
-}}
 """

@@ -324,7 +324,7 @@ def bookmarks_page(nodes: List[Any], q: str = "", parent_path: str = "") -> str:
             rows.append(
                 f"<details class='folder' style='padding:4px 0'>"
                 f"<summary>📁 {e(n['title'])} "
-                f"<span class='muted small'>({n['id'][:0] or ''}folder)</span></summary>"
+                f"<span class='muted small'>(folder)</span></summary>"
                 f"<ul class='bm'><li class='muted small'>Open folder view: "
                 f"<a href='browser://bookmarks?folder={e(n['id'])}'>{e(n['title'])}</a></li></ul>"
                 f"</details>")
@@ -374,13 +374,15 @@ def bookmark_edit_page(bid: str, title: str, url: str, duplicate: bool) -> str:
 # Downloads
 # --------------------------------------------------------------------------- #
 def _fmt_size(n: int) -> str:
+    """Human-readable byte size."""
     if n < 0:
         return "—"
+    size = float(n)
     for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024 or unit == "GB":
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n/1024**('B KB MB'.split().index(unit)):.1f} {unit}"
-        n /= 1024.0
-    return f"{n} B"
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} GB"
 
 
 def downloads_page(rows: List[Any]) -> str:
@@ -401,7 +403,7 @@ def downloads_page(rows: List[Any]) -> str:
         items.append(f"""
 <tr>
   <td>
-    <b>{e(r['path'].replace('\\\\', '/').split('/')[-1])}</b>{danger}
+    <b>{e(r['path'].replace(chr(92), '/').split('/')[-1])}</b>{danger}
     <div class='muted small'>{e(r['path'])}</div>{progress}
   </td>
   <td><span class='badge {badge}'>{e(state)}</span></td>
