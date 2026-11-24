@@ -11,3 +11,4 @@ browser-1.0.0-standalone.zip
 dist/
 browser.spec
 wintest_tmp.py
+browser-*.zip
