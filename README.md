@@ -111,8 +111,8 @@ instead; compatibility claims are never faked.
 ## Download the ready-made build
 
 A standalone Windows build (no Python needed — unzip and run) is attached to
-the v1.0.0 release: <https://github.com/guoyinuo2012/browser/releases/latest>
-(`browser-1.0.0-standalone.zip`, ~228 MB compressed).
+the v1.0.1 release: <https://github.com/guoyinuo2012/browser/releases/latest>
+(`browser-1.0.1-standalone.zip`, ~239 MB compressed).
 
 ## Launching
 
