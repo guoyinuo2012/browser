@@ -812,6 +812,82 @@ location, screen) can never be globally allowed — you decide per site, every t
 
 
 # --------------------------------------------------------------------------- #
+# Tor status (optional integration)
+# --------------------------------------------------------------------------- #
+def tor_page(enabled: bool, running: bool, status: str, port: int,
+             tor_path: str, can_launch: bool, exit_note: str = "") -> str:
+    """Tor dashboard: status, opt-in toggles, test, tor.exe launcher."""
+    if enabled:
+        state_badge = "ok" if running else "bad"
+        state_txt = ("proxy reachable" if running else "NO proxy answering")
+    else:
+        state_badge = ""
+        state_txt = "off (normal network)"
+    path_row = ""
+    if can_launch:
+        path_row = f"""
+<div class="row" style="margin-top:10px">
+  <form method="get" action="browser://tor" class="row">
+    <input type="hidden" name="action" value="set_path">
+    <input type="text" name="path" value="{e(tor_path)}"
+           placeholder="Path to tor.exe (optional — browser can launch it)" style="flex:1; min-width:300px">
+    <button class="btn" type="submit">Save path</button>
+  </form>
+</div>
+<p class="muted small">Point this at the tor binary shipped with Tor Browser
+(<span class="mono">...Tor Browser/Browser/TorBrowser/Tor/tor.exe</span>) or any
+tor.exe. browser launches it with its own data directory and stops it when
+browser exits.</p>"""
+    body = f"""
+<h2>Tor</h2>
+<p class="dim">Optional. Route all browser traffic through a local Tor SOCKS5
+proxy. Off by default — nothing changes until you turn it on.</p>
+<div class="grid cols3" style="margin:16px 0">
+  <div class="stat"><div class="num">{'ON' if enabled else 'OFF'}</div><div class="lbl">Tor mode</div></div>
+  <div class="stat"><div class="num" style="font-size:18px"><span class="badge {state_badge}">{e(state_txt)}</span></div>
+    <div class="lbl">Status · {e(status)}</div></div>
+  <div class="stat"><div class="num">{e(port)}</div><div class="lbl">SOCKS5 port (127.0.0.1)</div></div>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">Controls</h2>
+  <div class="row">
+    <a class="btn {'danger' if enabled else 'primary'}" href="browser://tor?action={'disable' if enabled else 'enable'}">
+      {'Turn Tor OFF' if enabled else 'Turn Tor ON'}</a>
+    <a class="btn" href="browser://tor?action=test">Run exit test</a>
+    {('<a class="btn" href="browser://tor?action=launch">Launch tor.exe now</a>' if can_launch else '')}
+  </div>
+  {('<div class="notice ok small" style="margin-top:12px">' + e(exit_note) + '</div>') if exit_note else ''}
+  <p class="muted small" style="margin-top:10px">Switching Tor on or off takes
+  effect after restarting browser — the engine pins its network to the proxy
+  at startup, exactly like other Chromium browsers.</p>
+  {path_row}
+</div>
+<div class="notice warn">
+  <b>What Tor mode does and does not cover:</b>
+  <ul class="bm" style="padding-left:16px; margin-top:8px">
+    <li>All web traffic (and DNS) goes through the Tor SOCKS5 proxy — no leaks.
+        WebRTC is disabled while Tor mode is on, because it bypasses proxies.</li>
+    <li>This is <b>not</b> the Tor Browser: the engine is Chromium/QtWebEngine, so
+        fingerprinting resistance is reduced but weaker than the Tor Browser.
+        Enable <a href="browser://settings#privacy">strict fingerprinting defenses</a>.</li>
+    <li>Some sites block Tor exits or show captchas — that is the network, not a defect.</li>
+    <li>Privacy: browser itself never phones home; your traffic only touches
+        the local proxy and the Tor network.</li>
+  </ul>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">How to get Tor running</h2>
+  <ul class="bm" style="padding-left:16px">
+    <li><b>Already running</b> — Tor Browser, Tor service or a daemon listening on
+        127.0.0.1:{e(port)}: just turn Tor ON and restart.</li>
+    <li><b>Let browser launch it</b> — save the path to <span class="mono">tor.exe</span>
+        above, then use “Launch tor.exe now”, or let browser start it automatically on launch.</li>
+  </ul>
+</div>"""
+    return page("Tor", body, active="privacy")
+
+
+# --------------------------------------------------------------------------- #
 # About
 # --------------------------------------------------------------------------- #
 def about_page(version: str, engine_version: str, data_dir: str) -> str:

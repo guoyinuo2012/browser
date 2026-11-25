@@ -54,6 +54,13 @@ def configure_engine() -> None:
             pass    # unreadable settings simply mean no proxy flag
     if proxy:
         flags.append(f"--proxy-server={proxy}")
+    # Tor mode overrides any manual proxy: pin everything to the SOCKS proxy
+    # and forbid local DNS resolution (no DNS leak).
+    try:
+        from .core.tor import engine_flags_for
+        flags.extend(engine_flags_for(Settings()))
+    except Exception:
+        pass    # Tor flags are best-effort at engine-config time
     if flags:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(
             flags + [os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")]).strip()
@@ -118,6 +125,8 @@ class AppState(QObject):
                                    lists.domain_of)
         self.logic.adblock = self.adblock
         self.adblock.rebuild()
+        from .core.tor import TorManager
+        self.tor = TorManager(self.settings, paths.data_dir())
         self.safe_browsing = SafeBrowsing(
             enabled=bool(self.settings.get("security.safe_browsing", True)),
             consent=bool(self.settings.get("security.safe_browsing_consent")),
@@ -240,6 +249,7 @@ class AppState(QObject):
         s.downloader = self.downloader
         s.network = self.nam          # shared QNetworkAccessManager for list fetches
         s.interceptor_logic = self.logic   # mixed-content page security reports
+        s.tor = self.tor
 
         def engine_name() -> str:
             return self.settings.get("search.default_engine", "DuckDuckGo")

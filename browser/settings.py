@@ -43,6 +43,10 @@ DEFAULTS: Dict[str, Any] = {
     "privacy.suggestions_in_omnibox": True,   # suggestions come from the search engine
     "privacy.webrtc_policy": "default",       # default | proxy_only | disable
     "privacy.block_popups": True,
+    # -- Tor (optional; off by default) ---------------------------------------
+    "tor.enabled": False,                     # route everything via local Tor
+    "tor.socks_port": 9050,
+    "tor.tor_path": "",                       # optional tor.exe to auto-launch
     "adblock.enabled": True,
     "adblock.cosmetic": True,
     "adblock.disabled_sites": [],              # per-site pause (eTLD+1)

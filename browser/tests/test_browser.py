@@ -754,6 +754,34 @@ class RegressionTests(unittest.TestCase):
         self.assertIn("Internal page error", html)
         self.assertNotIn("<script>", html)   # escaped
 
+    def test_tor_page_renders(self):
+        """browser://tor renders with the Tor dashboard (integration off)."""
+        from browser.pages.handler import SchemeHandler, Services
+        from browser.settings import Settings as S
+        from browser.core.tor import TorManager
+        s = Services()
+        s.settings = S(Path(_TMP) / f"tor-{time.time()}.json")
+        s.tor = TorManager(s.settings, Path(_TMP) / "tordata")
+        h = SchemeHandler(s)
+        out = h._route("tor", "/", _FakeUrl("tor", "/"))
+        self.assertEqual(len(out), 3)
+        self.assertIn("Tor", out[0])
+        self.assertIn("OFF", out[0])   # off by default
+
+    def test_tor_page_enable_flow(self):
+        from browser.pages.handler import SchemeHandler, Services
+        from browser.settings import Settings as S
+        from browser.core.tor import TorManager
+        s = Services()
+        s.settings = S(Path(_TMP) / f"tor2-{time.time()}.json")
+        s.tor = TorManager(s.settings, Path(_TMP) / "tordata2")
+        h = SchemeHandler(s)
+        out = h._route("tor", "/", _FakeUrl("tor", "/", "action=enable"))
+        self.assertTrue(s.settings.get("tor.enabled"))
+        # safety default applied: WebRTC off in Tor mode
+        self.assertEqual(s.settings.get("privacy.webrtc_policy"), "disable")
+        self.assertIn("restart", out[0])
+
     def test_qr_host_with_no_url_degrades(self):
         from browser.pages.handler import SchemeHandler, Services
         from browser.settings import Settings as S
@@ -779,10 +807,10 @@ class RegressionTests(unittest.TestCase):
 
 class _FakeUrl:
     """Minimal QUrl stand-in for SchemeHandler._route smoke tests."""
-    def __init__(self, host, path):
-        self._h, self._p = host, path
+    def __init__(self, host, path, query=b""):
+        self._h, self._p, self._q = host, path, query
     def query(self):
-        return b""
+        return self._q
     def host(self):
         return self._h
     def path(self):

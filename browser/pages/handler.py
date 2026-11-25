@@ -50,6 +50,7 @@ class Services:
         self.security = None            # SafeBrowsing
         self.downloader = None          # DownloadManager
         self.interceptor_logic = None   # PrivacyInterceptor (page security)
+        self.tor = None                 # TorManager (optional Tor mode)
 
 
 class SchemeHandler(QWebEngineUrlSchemeHandler):
@@ -137,6 +138,8 @@ class SchemeHandler(QWebEngineUrlSchemeHandler):
             return self._adblock(g)
         if host == "permissions":
             return self._permissions(g)
+        if host == "tor":
+            return self._tor(g)
         if host == "settings":
             s.request_settings()
             return pages.message_page(
@@ -426,7 +429,46 @@ class SchemeHandler(QWebEngineUrlSchemeHandler):
             selected_site=g("site")), "text/html", None
 
     # ------------------------------------------------------------------ #
-    
+    def _tor(self, g):
+        """Tor dashboard: opt-in toggles, status, tests, tor.exe launch."""
+        s = self.s
+        tm = s.tor
+        if tm is None:
+            return pages.message_page(
+                "Tor", "Tor support is unavailable in this build."), "text/html", None
+        action = g("action")
+        notice = ""
+        if action == "enable":
+            s.settings.set("tor.enabled", True)
+            # safety default: WebRTC bypasses proxies and would leak the real IP
+            if s.settings.get("privacy.webrtc_policy", "default") == "default":
+                s.settings.set("privacy.webrtc_policy", "disable")
+            notice = "Tor mode will be active after you restart browser."
+        elif action == "disable":
+            s.settings.set("tor.enabled", False)
+            notice = "Tor mode is off; it is fully removed after a restart."
+        elif action == "test":
+            tm.test_exit_async()
+            notice = "Exit test started — reload this page in a few seconds for the result."
+        elif action == "set_path":
+            path = g("path", "").strip()
+            s.settings.set("tor.tor_path", path)
+            notice = "Tor path saved."
+        elif action == "launch":
+            path = s.settings.get("tor.tor_path", "")
+            if tm.launch_tor(path, timeout=30):
+                notice = "Tor launched and bootstrapped — proxy is reachable."
+            else:
+                notice = "Could not launch or bootstrap tor.exe — see its path setting."
+        enabled = bool(s.settings.get("tor.enabled", False))
+        running = tm.is_running()
+        can_launch = bool(s.settings.get("tor.tor_path", "").strip())
+        return pages.tor_page(
+            enabled, running, tm.status_line(), tm.socks_port,
+            s.settings.get("tor.tor_path", ""), can_launch, notice), "text/html", None
+
+    # ------------------------------------------------------------------ #
+
 def _host_of(url: str) -> str:
     """Hostname of a URL string ("" when not a website)."""
     try:

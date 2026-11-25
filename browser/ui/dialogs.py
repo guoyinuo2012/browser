@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget, QDoubleSpinBox, )
 
 from .. import paths
-from ..constants import APP_NAME, APP_VERSION
+from ..constants import APP_NAME, APP_VERSION, URL_TOR
 from ..core.permissions import FEATURES, MANAGEABLE, SENSITIVE
 from ..core.search import BUILTIN_ENGINES
 from ..core.vault import strength
@@ -620,6 +620,31 @@ class SettingsDialog(QDialog):
         clear_btn = QPushButton("Clear browsing data now…")
         clear_btn.clicked.connect(lambda: self.s.open_clear_data())
         lay.addWidget(clear_btn)
+        self._section(lay, "Tor (optional)")
+        lay.addWidget(self._check("tor.enabled",
+                                  "Route all traffic through a local Tor SOCKS5 proxy "
+                                  "(applied at next start)"))
+        tor_row = QHBoxLayout()
+        tor_row.addWidget(QLabel("SOCKS5 port:"))
+        tport = QSpinBox(); tport.setRange(1, 65535)
+        tport.setValue(int(self.settings.get("tor.socks_port", 9050)))
+        tport.valueChanged.connect(lambda v: self.settings.set("tor.socks_port", v))
+        tor_row.addWidget(tport); tor_row.addStretch(1)
+        lay.addLayout(tor_row)
+        tor_path = QLineEdit(self.settings.get("tor.tor_path") or "")
+        tor_path.setPlaceholderText("Path to tor.exe (optional — browser can launch it)")
+        tor_path.editingFinished.connect(
+            lambda: self.settings.set("tor.tor_path", tor_path.text().strip()))
+        lay.addWidget(tor_path)
+        tor_link = QLabel('Status, tests and warnings: <a href="browser://tor">browser://tor</a>')
+        tor_link.setOpenExternalLinks(False)
+        tor_link.linkActivated.connect(lambda _u: self.s.open_internal_page(URL_TOR))
+        lay.addWidget(tor_link)
+        tor_warn = QLabel("Warning: WebRTC is auto-disabled in Tor mode (it bypasses proxies "
+                          "and would leak your IP). This is not the Tor Browser — enable "
+                          "strict fingerprinting defenses for best results.")
+        tor_warn.setWordWrap(True); tor_warn.setStyleSheet("color:#9aa2b1")
+        lay.addWidget(tor_warn)
 
     # -- 4 Security ---------------------------------------------------------------
     def _page_security(self, lay) -> None:

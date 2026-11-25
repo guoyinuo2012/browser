@@ -192,6 +192,14 @@ browser/
 
 # Changelog
 
+## v1.0.2 — optional Tor integration
+- Tor mode (off by default): browser-wide routing through a local Tor SOCKS5
+  proxy with DNS-leak protection, WebRTC auto-disable, live status dashboard
+  (`browser://tor`), exit-relay test, optional tor.exe launcher with isolated
+  data directory and clean shutdown, Settings toggles, startup fallback
+  warning if no proxy answers.
+- 14 new Tor unit tests (fake SOCKS5 server; no real network needed).
+
 ## v1.0.1 — full-code review and launch fixes
 **Launch fixes (the browser failed to open its window on every platform):**
 - Registered the window keyboard shortcuts (`_add_shortcuts`) — the method

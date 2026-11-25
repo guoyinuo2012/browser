@@ -76,6 +76,26 @@ def main() -> int:
     else:
         extra_windows = []
 
+    # Tor mode: make sure the proxy is up before windows open. Launch the
+    # user's tor.exe if configured; otherwise warn honestly and continue
+    # WITHOUT Tor (traffic would otherwise fail to connect or, worse, would
+    # be silently disabled if we dropped the proxy flag).
+    if state.settings.get("tor.enabled", False):
+        tm = state.tor
+        if not tm.is_running():
+            tor_path = state.settings.get("tor.tor_path", "")
+            if tor_path and os.path.isfile(tor_path):
+                tm.launch_tor(tor_path, timeout=90)
+        if not tm.is_running():
+            warn = ("Tor mode is enabled, but no Tor proxy answered on "
+                    "127.0.0.1:%d.\n\n" % tm.socks_port
+                    + "browser is starting WITHOUT Tor — pages will not load "
+                    "until Tor is available.\n\n"
+                    "Start Tor (e.g. Tor Browser) or configure a tor.exe path "
+                    "in browser://tor (menu → More tools → Tor status), "
+                    "then turn Tor mode off if you prefer normal browsing.")
+            QMessageBox.warning(None, constants.APP_NAME, warn)
+
     crashed = crashed_last_run(state.settings)
     if crashed and not args.private:
         offer = QMessageBox.question(
@@ -136,6 +156,11 @@ def _on_quit(state: AppState) -> None:
             state.private_profile.cookieStore().deleteAllCookies()
         except RuntimeError:
             pass
+    # stop a tor.exe we launched (never a foreign Tor service)
+    try:
+        state.tor.stop()
+    except Exception:
+        pass    # teardown must never block shutdown
     state.store.close()
     state.settings.save()
 
