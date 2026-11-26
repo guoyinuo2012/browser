@@ -1,7 +1,7 @@
 """Application constants for browser."""
 
 APP_NAME = "browser"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 APP_USER_AGENT_COMMENT = "browser"
 
 SCHEME = b"browser"

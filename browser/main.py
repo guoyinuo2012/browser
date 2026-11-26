@@ -11,8 +11,10 @@ when the previous run did not exit cleanly.
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import os
 import sys
+import traceback
 
 from . import constants
 from . import engine_probe
@@ -25,8 +27,38 @@ import PyQt6.QtWebEngineWidgets  # noqa: F401 — must precede QApplication
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 
+def _crash_log_path() -> str:
+    """Where startup crashes are recorded (windowed exe has no console)."""
+    try:
+        from . import paths
+        return str(paths.data_dir() / "crash.log")
+    except Exception:
+        return "crash.log"
+
+
+def _log_crash(stage: str, exc: BaseException) -> None:
+    try:
+        with open(_crash_log_path(), "a", encoding="utf-8") as f:
+            import time as _t
+            f.write(f"\n=== {_t.strftime('%Y-%m-%d %H:%M:%S')} — {stage} ===\n")
+            traceback.print_exc(file=f)
+    except Exception:
+        pass    # a crash log must never cause a second crash
+
+
 def main() -> int:
     """Application entry point; returns a process exit code."""
+    # frozen self-entrypoint: the engine probe child runs this and exits
+    if "--engine-probe" in sys.argv:
+        return engine_probe.run_probe_entrypoint()
+
+    # fatal (native) crashes land in the log, not in the void
+    try:
+        fh = open(_crash_log_path(), "a", encoding="utf-8")
+        faulthandler.enable(file=fh)
+    except Exception:
+        pass    # logging is best-effort
+
     parser = argparse.ArgumentParser(prog=constants.APP_NAME,
                                      description="The privacy-first web browser")
     parser.add_argument("--private", action="store_true",
@@ -38,12 +70,18 @@ def main() -> int:
     parser.add_argument("urls", nargs="*", help="URLs to open")
     args = parser.parse_args()
 
-    # In restricted environments (CI sandboxes), Chromium fail-fasts silently.
-    # Probe for a working flag set; bail out with a clear message if none.
+    # Engine pre-flight: catches the "Chromium fail-fasts silently" class of
+    # environment problems (AV policy, GPU blocks, job objects) and turns a
+    # silent crash into a readable message + crash.log entry.
     if not args.no_probe and engine_probe.should_probe():
-        ok, flags, code = engine_probe.find_working_configuration()
+        try:
+            ok, flags, code = engine_probe.find_working_configuration()
+        except Exception:
+            _log_crash("engine probe", sys.exc_info()[1])
+            ok, flags, code = False, [], -2
         if not ok:
             msg = engine_probe.restriction_message(code)
+            _log_crash("engine probe failed", Exception(msg))
             platform = os.environ.get("QT_QPA_PLATFORM", "")
             if platform in ("offscreen", "minimal"):
                 # No user can click a dialog here; fail fast with the reason.
@@ -55,6 +93,16 @@ def main() -> int:
         if flags:
             os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(flags)
 
+    try:
+        return _run_app(args)
+    except SystemExit:
+        raise
+    except BaseException as exc:
+        _log_crash("startup", exc)
+        raise
+
+
+def _run_app(args) -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(constants.APP_NAME)
     app.setApplicationDisplayName(constants.APP_NAME)

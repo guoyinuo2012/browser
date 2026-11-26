@@ -667,23 +667,18 @@ class PagesTests(unittest.TestCase):
 
 
 class EngineProbeTests(unittest.TestCase):
-    def test_should_probe_only_when_restricted(self):
+    def test_should_probe_by_default_and_can_be_disabled(self):
         from browser.engine_probe import should_probe
-        old = os.environ.get("QT_QPA_PLATFORM")
-        old_b = os.environ.get("BROWSER_PROBE")
+        old = os.environ.get("BROWSER_PROBE")
         try:
-            os.environ.pop("QT_QPA_PLATFORM", None)
             os.environ.pop("BROWSER_PROBE", None)
-            self.assertFalse(should_probe())           # normal desktop: skip
-            os.environ["QT_QPA_PLATFORM"] = "offscreen"
-            self.assertTrue(should_probe())            # CI/headless: probe
-            os.environ.pop("QT_QPA_PLATFORM")
+            self.assertTrue(should_probe())            # default: always probe
+            os.environ["BROWSER_PROBE"] = "0"
+            self.assertFalse(should_probe())           # explicit opt-out
             os.environ["BROWSER_PROBE"] = "1"
             self.assertTrue(should_probe())            # explicit override
         finally:
-            if old is not None: os.environ["QT_QPA_PLATFORM"] = old
-            else: os.environ.pop("QT_QPA_PLATFORM", None)
-            if old_b is not None: os.environ["BROWSER_PROBE"] = old_b
+            if old is not None: os.environ["BROWSER_PROBE"] = old
             else: os.environ.pop("BROWSER_PROBE", None)
 
     def test_probe_flag_sets_ordered_by_liberality(self):
@@ -696,7 +691,7 @@ class EngineProbeTests(unittest.TestCase):
         from browser.engine_probe import restriction_message
         msg = restriction_message(3221226505)
         self.assertIn("3221226505", msg)
-        self.assertIn("normally", msg)
+        self.assertIn("crash.log", msg)   # tells the user where the reason lives
 
 
 class RegressionTests(unittest.TestCase):

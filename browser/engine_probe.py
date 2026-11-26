@@ -1,15 +1,18 @@
 """Engine pre-flight probe for browser.
 
-Chromium fails fast (0xC0000409) in environments whose process/job
-restrictions block its GPU or IPC needs — e.g. CI sandboxes. That failure is
-uncatchable in-process, so when a restricted environment is suspected,
-browser runs a tiny probe subprocess with a few flag presets and:
+Chromium can fail fast (0xC0000409) when the surrounding environment
+restricts its GPU/IPC needs — antivirus policy, RDP/VM GPU blocks, job
+objects. That failure is uncatchable in-process and kills the app silently,
+so browser runs a tiny probe subprocess with a few flag presets FIRST:
 
-  * uses the first preset that works (applied via QTWEBENGINE_CHROMIUM_FLAGS),
-  * otherwise reports a clear, actionable error instead of dying silently.
+  * source runs:  python -u -c "<probe script>"
+  * frozen exe:   browser.exe --engine-probe   (self-restart, child exits)
 
-On a normal desktop the first preset succeeds in ~1s, so the probe is only
-enabled when it can matter (see should_probe()).
+The first preset that works is applied via QTWEBENGINE_CHROMIUM_FLAGS.
+If none works, browser reports a clear, actionable error (and writes
+crash.log) instead of dying silently.
+
+On a normal desktop the first preset succeeds in ~1 s.
 """
 
 from __future__ import annotations
@@ -19,7 +22,11 @@ import subprocess
 import sys
 from typing import Optional
 
-PROBE_SCRIPT = """
+FROZEN = bool(getattr(sys, "frozen", False))
+
+# In-process probe body (used by `python -c` in source runs and by the
+# `browser.exe --engine-probe` self-entrypoint in frozen runs).
+PROBE_CODE = """
 import sys
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
 QtWebEngineQuick.initialize()
@@ -41,22 +48,28 @@ PROBE_FLAG_SETS = [
 FAILFAST_EXIT = 3221226505  # 0xC0000409
 
 
+def _probe_command() -> list:
+    """Command that runs the probe body in a child process."""
+    if FROZEN:
+        # Our own exe re-invoked with a special flag; the child runs the
+        # probe in-process and exits (a fail-fast there only kills the child).
+        return [sys.executable, "--engine-probe"]
+    return [sys.executable, "-u", "-c", PROBE_CODE]
+
+
 def should_probe() -> bool:
-    """Probe only in environments where Chromium is likely constrained."""
-    if os.environ.get("BROWSER_PROBE") == "1":
-        return True
-    platform = os.environ.get("QT_QPA_PLATFORM", "")
-    return platform in ("offscreen", "minimal")
+    """Probe unconditionally unless explicitly disabled — a Chromium fail-fast
+    on a desktop would otherwise look like a silent crash."""
+    return os.environ.get("BROWSER_PROBE") != "0"
 
 
-def probe(flag_set: list[str], timeout: float = 30.0) -> Optional[int]:
+def probe(flag_set: list, timeout: float = 30.0) -> Optional[int]:
     """Run one probe. Returns exit code (0 = OK) or -1 on timeout."""
     env = dict(os.environ)
     env["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(flag_set)
     try:
-        r = subprocess.run([sys.executable, "-u", "-c", PROBE_SCRIPT],
-                           env=env, capture_output=True, text=True,
-                           timeout=timeout)
+        r = subprocess.run(_probe_command(), env=env, capture_output=True,
+                           text=True, timeout=timeout)
         return r.returncode if "PROBE_OK" in r.stdout else (r.returncode or -2)
     except subprocess.TimeoutExpired:
         return -1
@@ -64,7 +77,7 @@ def probe(flag_set: list[str], timeout: float = 30.0) -> Optional[int]:
         return -2
 
 
-def find_working_configuration() -> tuple[bool, list[str], Optional[int]]:
+def find_working_configuration() -> tuple:
     """Returns (ok, working_flags, last_exit_code)."""
     last = None
     for flags in PROBE_FLAG_SETS:
@@ -79,10 +92,27 @@ def restriction_message(exit_code: Optional[int]) -> str:
     """Human-facing explanation for a failed engine probe."""
     return (
         "browser could not start its rendering engine.\n\n"
-        f"Chromium exited with code {exit_code} (fail-fast). This happens when "
-        "the surrounding environment restricts the process — for example "
-        "automated test sandboxes with Windows job-object limits.\n\n"
-        "browser itself is fine: launch it normally (outside the sandbox) and "
-        "it will run. Tried GPU/no-sandbox/single-process fallbacks "
-        "automatically; none were permitted here."
+        f"Chromium exited with code {exit_code}. This happens when the "
+        "surrounding environment blocks its graphics or IPC needs — for "
+        "example antivirus policy, a VM/RDP session without GPU, or "
+        "restricted-process policies.\n\n"
+        "Things to try: update your graphics driver, or try running with "
+        "--no-probe to see the raw behaviour. The reason has been written to "
+        "the crash.log file in browser's data folder."
     )
+
+
+def run_probe_entrypoint() -> int:
+    """Handler for `browser.exe --engine-probe` (frozen) — runs the probe
+    body in-process and exits with 0 on success."""
+    env_code = compile(PROBE_CODE, "<engine-probe>", "exec")
+    g = {"__name__": "__probe__"}
+    try:
+        exec(env_code, g)
+        return 0
+    except SystemExit as e:
+        return int(e.code or 0)
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+        return 1
