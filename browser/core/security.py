@@ -6,7 +6,7 @@
                               lookups gated behind explicit user consent.
   * DownloadScreening       — file-type risk classification with user warnings.
   * CertGate                — certificate error handling contract: errors are
-                              NEVER bypassed automatically.
+                              never bypassed automatically.
 
 Design principle: security warnings can be loud, but never silent bypasses.
 """
@@ -132,7 +132,7 @@ class DownloadScreening:
 class CertGate:
     """Certificate error policy.
 
-    Rule: certificate errors are NEVER bypassed silently. The only user
+    Certificate errors are never bypassed silently. The only user
     action available is to view details and go back. This class exists so
     the policy is stated in code, not just in the UI.
     """

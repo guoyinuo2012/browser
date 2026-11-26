@@ -179,7 +179,7 @@ def home(settings, engine_name: str, search_url: str) -> str:
         f'<div class="t-lbl">{lbl}</div></a>' for ico, lbl, href in tiles)
     body = f"""
 <div class="home-hero"><div class="logo">browser<span>.</span></div>
-<p class="dim">Private by default. Secure by design.</p></div>
+<p class="dim">A browser that keeps your data on your device</p></div>
 <div class="home-search">
   <form action="browser://search" method="get">
     <input type="search" name="q" placeholder="Search with {engine} or enter address"
@@ -532,7 +532,7 @@ return to the passwords page.</div>
 # --------------------------------------------------------------------------- #
 def privacy_page(stats: Dict, policy_lines: List[Tuple[str, str]], sites,
                  level: str) -> str:
-    """Privacy dashboard: counters, policy state, honest limitations."""
+    """Privacy dashboard: counters, policy state, and its scope."""
     trackers = stats.get("trackers", 0)
     cookies = stats.get("cookies", 0)
     ads = stats.get("ads", 0)
@@ -566,10 +566,10 @@ was uploaded to produce them.</p>
   {('<table><tr><th>Site</th><th>Blocked</th><th></th></tr>' + site_rows + '</table>') if site_rows else '<p class="dim">No tracker activity seen yet.</p>'}
 </div>
 <div class="notice">
-  <b>Honest limitation:</b> blocking lists reduce tracking, but no browser —
-  including this one — makes you completely anonymous. Your IP address, ISP,
-  and sophisticated fingerprinting can still identify you. Use a VPN/Tor for
-  stronger anonymity.</div>"""
+  <h2 style="margin-top:0">Note</h2>
+  <p class="small">Blocking lists reduce tracking, but no browser makes you
+  anonymous. Your IP address, ISP and advanced fingerprinting can still
+  identify you; use a VPN or Tor for stronger anonymity.</p></div>"""
     return page("Privacy", body, active="privacy")
 
 
@@ -867,11 +867,11 @@ proxy. Off by default — nothing changes until you turn it on.</p>
   <ul class="bm" style="padding-left:16px; margin-top:8px">
     <li>All web traffic (and DNS) goes through the Tor SOCKS5 proxy — no leaks.
         WebRTC is disabled while Tor mode is on, because it bypasses proxies.</li>
-    <li>This is <b>not</b> the Tor Browser: the engine is Chromium/QtWebEngine, so
-        fingerprinting resistance is reduced but weaker than the Tor Browser.
+    <li>This is <b>not</b> the Tor Browser: the engine is Chromium/QtWebEngine,
+        so fingerprinting resistance is weaker than the Tor Browser's.
         Enable <a href="browser://settings#privacy">strict fingerprinting defenses</a>.</li>
     <li>Some sites block Tor exits or show captchas — that is the network, not a defect.</li>
-    <li>Privacy: browser itself never phones home; your traffic only touches
+    <li>Privacy: browser makes no requests of its own; your traffic only touches
         the local proxy and the Tor network.</li>
   </ul>
 </div>
@@ -896,16 +896,14 @@ def about_page(version: str, engine_version: str, data_dir: str) -> str:
 <div class="center" style="margin-top:50px">
   <div class="logo" style="font-size:44px; font-weight:800; letter-spacing:5px">
     browser<span style="color:var(--accent)">.</span></div>
-  <p class="dim">The privacy-first web browser</p>
-  <p><span class="badge">version {e(version)}</span>
-     <span class="badge">engine: Chromium via QtWebEngine {e(engine_version)}</span></p>
+  <p class="dim">Version {e(version)}</p>
+  <p><span class="badge">engine: Chromium via QtWebEngine {e(engine_version)}</span></p>
 </div>
 <div class="card" style="margin-top:30px">
-  <h2 style="margin-top:0">Privacy commitment</h2>
+  <h2 style="margin-top:0">How this browser handles your data</h2>
   <ul class="bm" style="padding-left:16px">
-    <li>All data stays on this device. No accounts, no sync, no telemetry.</li>
-    <li>No trackers, no ads, no data selling — ever.</li>
-    <li>Optional update checks happen only against a feed you configure and approve.</li>
+    <li>All data stays on this device: no accounts, no sync, no telemetry.</li>
+    <li>Update checks run only against a feed you configure and approve.</li>
     <li>Data folder: <span class="mono small">{e(data_dir)}</span></li>
   </ul>
 </div>

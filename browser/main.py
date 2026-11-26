@@ -75,7 +75,7 @@ def main() -> int:
         pass    # logging is best-effort
 
     parser = argparse.ArgumentParser(prog=constants.APP_NAME,
-                                     description="The privacy-first web browser")
+                                     description="A desktop web browser focused on privacy")
     parser.add_argument("--private", action="store_true",
                         help="start with a private window")
     parser.add_argument("--no-probe", action="store_true",
@@ -140,7 +140,7 @@ def _run_app(args) -> int:
         extra_windows = []
 
     # Tor mode: make sure the proxy is up before windows open. Launch the
-    # user's tor.exe if configured; otherwise warn honestly and continue
+    # user's tor.exe if configured; otherwise warn and continue without it
     # WITHOUT Tor (traffic would otherwise fail to connect or, worse, would
     # be silently disabled if we dropped the proxy flag).
     if state.settings.get("tor.enabled", False):

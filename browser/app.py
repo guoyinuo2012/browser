@@ -339,10 +339,10 @@ class AppState(QObject):
             QMessageBox.information(
                 parent, "browser",
                 f"browser {constants.APP_VERSION}\n\n"
-                "No update feed is configured. browser never phones home: "
-                "add a signed update feed in Settings → Advanced to enable "
-                "update checks. Updates are only applied after signature "
-                "verification, and downgrades are refused.")
+                "No update feed is configured. browser makes no network "
+                "requests on its own: add a signed update feed in Settings → "
+                "Advanced to enable update checks. Updates are only applied "
+                "after signature verification, and downgrades are refused.")
             return
         if not updates.feed_trusted(paths.data_dir()):
             QMessageBox.information(

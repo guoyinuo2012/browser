@@ -1,16 +1,18 @@
 """
-browser — a privacy-first desktop web browser.
+browser — a desktop web browser.
 
-Official name: browser (lowercase, single word).
+Built on QtWebEngine (Chromium). All data stays on the user's device:
+no telemetry, no analytics, and no network activity beyond what the
+user initiates. Optional Tor mode (off by default) routes all traffic
+through a local Tor SOCKS5 proxy.
 
-Built on QtWebEngine (Chromium) with a modular architecture:
+Package layout:
 
-    engine/     application bootstrap and engine configuration
-    core/       data + policy modules (privacy, security, storage, vaults)
+    core/       data + policy modules (privacy, security, storage, vault)
     ui/         native chrome UI (tabs, omnibox, toolbars, dialogs)
     pages/      browser:// internal page rendering
-    data/       bundled threat/block lists
+    data/       bundled filter lists and built-in extensions
 """
 
 __app_name__ = "browser"
-__version__ = "1.0.0"
+__version__ = "1.0.3"

@@ -14,7 +14,7 @@ Tor mode is OFF by default and opt-in. When it is enabled:
   * exit connectivity is verified against check.torproject.org through the
     proxy (pure-Python SOCKS5 client; no extra dependencies).
 
-Honest limitation: QtWebEngine is not the Tor Browser. Fingerprinting
+Note: QtWebEngine is not the Tor Browser. Fingerprinting
 surface is reduced (anti-fingerprinting scripts) but not eliminated, and
 browser recommends strict fingerprinting defenses in Tor mode.
 """

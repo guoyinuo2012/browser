@@ -667,10 +667,11 @@ class SettingsDialog(QDialog):
         self._section(lay, "Downloads")
         lay.addWidget(self._check("security.download_warnings",
                                   "Warn before saving executable/dangerous files"))
-        self._section(lay, "Never")
-        never = QLabel("browser never bypasses certificate errors, never installs "
-                       "unverified updates, and never executes downloads automatically.")
-        never.setWordWrap(True); never.setStyleSheet("color:#ff5d5d")
+        self._section(lay, "Fixed behavior")
+        never = QLabel("Certificate errors are always rejected, updates are "
+                       "verified before being offered, and downloads are never "
+                       "executed automatically.")
+        never.setWordWrap(True); never.setStyleSheet("color:#9aa2b1")
         lay.addWidget(never)
 
     # -- 5 Search ---------------------------------------------------------------
@@ -950,10 +951,9 @@ class SettingsDialog(QDialog):
         from PyQt6.QtCore import QT_VERSION_STR
         about = QLabel(f"""
 <div style="font-size:26px; font-weight:800">browser<span style="color:#4f8cff">.</span></div>
-<p style="color:#9aa2b1">The privacy-first web browser</p>
+<p style="color:#9aa2b1">A desktop web browser focused on privacy</p>
 <p>Version {APP_VERSION}<br>Engine: Chromium via QtWebEngine {QT_VERSION_STR}<br>
 License: MIT (application code)</p>
-<p style="color:#9aa2b1">All data stays on this device. No accounts, no telemetry,
-no trackers, no data selling.</p>""")
+<p style="color:#9aa2b1">All data stays on this device. No accounts, no telemetry.</p>""")
         about.setWordWrap(True)
         lay.addWidget(about)

@@ -625,7 +625,7 @@ class PagesTests(unittest.TestCase):
     def test_home_renders(self):
         html = pages.home(self.settings, "DuckDuckGo", "https://duckduckgo.com/?q={query}")
         self.assertIn("browser", html)
-        self.assertIn("Private by default", html)
+        self.assertIn("New tab", html)
 
     def test_all_pages_render(self):
         self.assertTrue(pages.history_page([], "", 0))
