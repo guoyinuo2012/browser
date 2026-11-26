@@ -38,10 +38,23 @@ def _crash_log_path() -> str:
 
 def _log_crash(stage: str, exc: BaseException) -> None:
     try:
-        with open(_crash_log_path(), "a", encoding="utf-8") as f:
+        path = _crash_log_path()
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
             import time as _t
             f.write(f"\n=== {_t.strftime('%Y-%m-%d %H:%M:%S')} — {stage} ===\n")
             traceback.print_exc(file=f)
+    except Exception:
+        pass    # a crash log must never cause a second crash
+
+
+def _log_crash_text(stage: str, text: str) -> None:
+    try:
+        path = _crash_log_path()
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            import time as _t
+            f.write(f"\n=== {_t.strftime('%Y-%m-%d %H:%M:%S')} — {stage} ===\n{text}\n")
     except Exception:
         pass    # a crash log must never cause a second crash
 
@@ -54,7 +67,9 @@ def main() -> int:
 
     # fatal (native) crashes land in the log, not in the void
     try:
-        fh = open(_crash_log_path(), "a", encoding="utf-8")
+        log_path = _crash_log_path()
+        os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+        fh = open(log_path, "a", encoding="utf-8")
         faulthandler.enable(file=fh)
     except Exception:
         pass    # logging is best-effort
@@ -81,7 +96,7 @@ def main() -> int:
             ok, flags, code = False, [], -2
         if not ok:
             msg = engine_probe.restriction_message(code)
-            _log_crash("engine probe failed", Exception(msg))
+            _log_crash_text("engine probe failed", msg)
             platform = os.environ.get("QT_QPA_PLATFORM", "")
             if platform in ("offscreen", "minimal"):
                 # No user can click a dialog here; fail fast with the reason.
